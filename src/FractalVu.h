@@ -74,7 +74,7 @@ public:
   void drawScene();
   void convert(float coord[2], float x, float y);
 
-  void zoomSteps(bool images, bool video, int steps, const char* filename);
+  void zoomSteps(bool images, int steps);
 };
 
 #endif

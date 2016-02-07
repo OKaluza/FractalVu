@@ -289,17 +289,6 @@ void FractalApplication::updateSharedData(SharedIStream& in)
 int main(int argc, char** argv)
 {
   Application<FractalApplication> app("FractalViewer");
-  oargs().setStringVector("gLucifer", "gLucifer Arguments", args);
-  for (int i=0; i< args.size(); i++)
-    std::cout << args[i] << std::endl;
-  if (args.size() < 1)
-  {
-    for (int i=1; i< argc; i++)
-    {
-      std::cout << argv[i] << std::endl;
-      args.push_back(argv[i]);
-    }
-  }
   return omain(app, argc, argv);
 }
 
