@@ -6,11 +6,12 @@ OPATH = tmp
 CPP=g++
 
 #Location of LavaVu build/source
-LVPATH=../LavaVu
+LVINC=../LavaVu/src
+LVLIB=.
 SRCDIR=src
 
 #Default flags
-CFLAGS = -I${SRCDIR} -I${LVPATH}/src
+CFLAGS = -I${SRCDIR} -I${LVINC}
 
 #Separate compile options per configuration
 ifeq ($(CONFIG),debug)
@@ -84,7 +85,7 @@ $(OBJS): $(OPATH)/%.o : %.cpp $(INC)
 	$(CPP) $(CFLAGS) $(DEFINES) -c $< -o $@
 
 $(PROGRAM): paths $(OBJS)
-	$(CPP) -o $(PROGRAM) $(OBJS) $(LIBS) ${LVPATH}/bin/libLavaVu.so
+	$(CPP) -o $(PROGRAM) $(OBJS) $(LIBS) ${LVLIB}/libLavaVu.so
 
 clean:
 	/bin/rm -f *~ $(OPATH)/*.o $(PROGRAM)

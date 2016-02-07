@@ -498,6 +498,15 @@ void FractalVu::display(void)
   //{
   //TODO: redraw copied framebuffer for omegalib render...
   //}
+
+#ifdef HAVE_LIBAVCODEC
+  if (encoder)
+  {
+    viewer->pixels(encoder->buffer, false, true);
+    //bitrate settings?
+    encoder->frame();
+  }
+#endif
 }
 
 void FractalVu::drawScene()
@@ -679,6 +688,7 @@ void FractalVu::convert(float coord[2], float x, float y)
 
 void FractalVu::write_tiled(const char* ext, bool alpha, int count)
 {
+  std::string fn = (files.size() > 0 ? files[0].base : "default");
   float zoom = properties["zoom"].ToFloat(0.5);
   //Tiled image
   int width = viewer->width * tiles[0];
@@ -687,7 +697,7 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
 
   //Write tiled data to single image file
   char path[256];
-  sprintf(path, "%s%s-tiled-%d.%s", viewer->output_path.c_str(), files[0].base.c_str(), count, ext);
+  sprintf(path, "%s%s-tiled-%d.%s", viewer->output_path.c_str(), fn.c_str(), count, ext);
   std::ofstream file(path, std::ios::binary);
 
   //Format specific headers
@@ -695,7 +705,7 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
   if (strcmp(ext, "data") == 0)
   {
     char rawpath[256];
-    sprintf(rawpath, "%s%s-tiled.raw", viewer->output_path.c_str(), files[0].base.c_str());
+    sprintf(rawpath, "%s%s-tiled.raw", viewer->output_path.c_str(), fn.c_str());
     std::ofstream rawfile(rawpath);
     rawfile << "IMAGINE_RAW_FILE" << std::endl;
     rawfile << "WIDTH " << width << std::endl;
@@ -828,6 +838,21 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     break;
   case KEY_END:
     break;
+  case 'm':
+#ifdef HAVE_LIBAVCODEC
+    if (!encoder)
+    {
+      int fps = 30;
+      std::string fn = properties["name"].ToString("fractal") + ".mp4";
+      encoder = new VideoEncoder(fn.c_str(), viewer->width, viewer->height, fps);
+    }
+    else
+    {
+      delete encoder;
+      encoder = NULL;
+    }
+#endif
+    break;
   case 'r':
     write_tiled("data", false);
     break;
@@ -851,8 +876,8 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     viewer->snapshot("fractal");
     break;
   case 'z':
-    //images, video, steps, filename
-    zoomSteps(false, true, 1800, "zoomy.mp4");
+    //images, steps
+    zoomSteps(false, 1800);
     break;
   }
 }
@@ -980,17 +1005,8 @@ bool FractalVu::mouseScroll(int scroll)
   return true;
 }
 
-void FractalVu::zoomSteps(bool images, bool video, int steps, const char* filename)
+void FractalVu::zoomSteps(bool images, int steps)
 {
-#ifdef HAVE_LIBAVCODEC
-  VideoEncoder* encoder = NULL;
-  if (video)
-    encoder = new VideoEncoder(filename, viewer->width, viewer->height);
-  unsigned char* buffer = new unsigned char[viewer->width * viewer->height * 3];
-#else
-  if (video)
-    std::cout << "Video output disabled, libavcodec not found!" << std::endl;
-#endif
   for (int i=0; i<=steps; i++)
   {
     std::cout << "... Writing step: " << i << " zoom: " << properties["zoom"].ToFloat(0.5) << std::endl;
@@ -1002,21 +1018,9 @@ void FractalVu::zoomSteps(bool images, bool video, int steps, const char* filena
     write_tiled("png", false, i);
 #endif
 
-#ifdef HAVE_LIBAVCODEC
-    if (video)
-    {
-      viewer->pixels(buffer, false, true);
-      //bitrate settings?
-      encoder->frame(buffer);
-    }
-#endif
     properties["zoom"] = properties["zoom"].ToFloat(0.5) * 1.003;
     //if (i%10 == 0) iterations+= 7;
   }
-#ifdef HAVE_LIBAVCODEC
-  delete[] buffer;
-  if (encoder) delete encoder;
-#endif
 }
 
 bool FractalVu::parseCommands(std::string data)
