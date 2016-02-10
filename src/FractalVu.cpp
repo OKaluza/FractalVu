@@ -100,6 +100,7 @@ FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int wi
   bool writeimage = false,  writemovie = false;
   int alpha = 0, subsample = 0;
   FilePath* fractalfile = NULL;
+  encoder = NULL;
 
   fixedwidth = width;
   fixedheight = height;
@@ -111,8 +112,6 @@ FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int wi
                       "zoom=0.5\n"
                       "rotate=0.0\n"
                       "julia=false\n"
-                      "width=800\n"
-                      "height=600\n"
                       "origin=[0,0]\n"
                       "selected=[0,0]\n"
                       "shift=[0,0]\n"

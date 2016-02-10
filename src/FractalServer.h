@@ -64,11 +64,9 @@ public:
   virtual ~FractalServer();
   struct mg_context* ctx;
 
-   void send_image(struct mg_connection *conn);
+  void send_image(struct mg_connection *conn);
 
-  static void* callback(enum mg_event event,
-                        struct mg_connection *conn,
-                        const struct mg_request_info *request_info);
+  static int request(struct mg_connection *conn);
 
   // virtual functions for window management
   virtual void open(int width, int height);
