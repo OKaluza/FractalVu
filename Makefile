@@ -1,12 +1,11 @@
 #Object files path
-#OPATH = /tmp
 OPATH = tmp
 
 #Compilers
 CPP=g++
 
 #Location of LavaVu build/source
-LVINC=../LavaVu/src
+LVINC=../../LavaVu/src
 LVLIB=.
 SRCDIR=src
 

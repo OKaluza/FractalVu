@@ -30,6 +30,7 @@ FractalServer::FractalServer(OpenGLViewer* viewer, std::string htmlpath, int por
   : viewer(viewer), port(port), threads(threads), path(htmlpath), quality(quality)
 {
   imageCache = NULL;
+  image = NULL;
   jpeg = NULL;
   updated = false;
   client_id = 0;
@@ -38,8 +39,8 @@ FractalServer::FractalServer(OpenGLViewer* viewer, std::string htmlpath, int por
   pthread_mutex_init(&cs_mutex, NULL);
   pthread_mutex_init(&viewer->cmd_mutex, NULL);
   pthread_cond_init (&condition_var, NULL);
-   pthread_mutex_init(&p_mutex, NULL);
-   pthread_cond_init (&p_condition_var, NULL);
+  pthread_mutex_init(&p_mutex, NULL);
+  pthread_cond_init (&p_condition_var, NULL);
 }
 
 FractalServer::~FractalServer()
@@ -54,6 +55,7 @@ void FractalServer::open(int width, int height)
 {
   //Enable the animation timer
   //viewer->animate(250);   //1/4 sec timer
+  struct mg_callbacks callbacks;
 
   char ports[16], threadstr[16];
   sprintf(ports, "%d", port);
@@ -67,7 +69,10 @@ void FractalServer::open(int width, int height)
     NULL
   };
 
-  ctx = mg_start(&FractalServer::callback, NULL, options);
+  memset(&callbacks, 0, sizeof(callbacks));
+  callbacks.begin_request = &FractalServer::request;
+  if ((ctx = mg_start(&callbacks, NULL, options)) == NULL)
+    abort_program("%s\n", "Cannot start http server, fatal exit");
 }
 
 void FractalServer::resize(int new_width, int new_height)
@@ -229,153 +234,148 @@ void FractalServer::send_image(struct mg_connection *conn)
    }*/
 }
 
-void* FractalServer::callback(enum mg_event event,
-                       struct mg_connection *conn,
-                       const struct mg_request_info *request_info)
+int FractalServer::request(struct mg_connection *conn)
 {
-  if (event == MG_NEW_REQUEST)
-  {
-    debug_print("SERVER REQUEST: %s\n", request_info->uri);
+  const struct mg_request_info *request_info = mg_get_request_info(conn);
 
-    if (strcmp("/", request_info->uri) == 0)
-    {
-      mg_printf(conn, "HTTP/1.1 302 Found\r\n"
-                "Set-Cookie: original_url=%s\r\n"
-            "Location: %s%s\r\n\r\n",
-            request_info->uri, "/index.html", (_self->viewer->visible ? "?server=control" : "?server=render"));
-    }
-      else if (strstr(request_info->uri, "/clear") != NULL)
-    {
-         //Clear queued
-         mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
-         pthread_mutex_lock(&_self->cs_mutex);
-         FractalServer::data.clear();
-         pthread_mutex_unlock(&_self->cs_mutex);
-    }
-      else if (strstr(request_info->uri, "/update") != NULL)
-    {
-         //Update shader/params only, no image returned
-         mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
-         char post_data[32000];
-         int post_data_len = mg_read(conn, post_data, sizeof(post_data));
-         //printf("RECV %d\n", post_data_len);
-         if (post_data_len)
-    {
-           pthread_mutex_lock(&_self->cs_mutex);
-           //Push command onto queue to be processed in the viewer thread
-           post_data[post_data_len-1] = '\0';
-           FractalServer::data.push_back(post_data);
-           _self->viewer->postdisplay = true;
-           pthread_mutex_unlock(&_self->cs_mutex);
-    }
-    }
-      else if (strstr(request_info->uri, "/image") != NULL)
-    {
-        FractalServer::images = true; //Flag image requested
-        //TEST - gets currently cached image only
-        if (_self->image)
+  debug_print("SERVER REQUEST: %s\n", request_info->uri);
+
+  if (strcmp("/", request_info->uri) == 0)
+  {
+    mg_printf(conn, "HTTP/1.1 302 Found\r\n"
+              "Set-Cookie: original_url=%s\r\n"
+          "Location: %s%s\r\n\r\n",
+          request_info->uri, "/index.html", (_self->viewer->visible ? "?server=control" : "?server=render"));
+  }
+  else if (strstr(request_info->uri, "/clear") != NULL)
+  {
+    //Clear queued
+    mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
+    pthread_mutex_lock(&_self->cs_mutex);
+    FractalServer::data.clear();
+    pthread_mutex_unlock(&_self->cs_mutex);
+  }
+  else if (strstr(request_info->uri, "/update") != NULL)
+  {
+    //Update shader/params only, no image returned
+    mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
+    char post_data[32000];
+    int post_data_len = mg_read(conn, post_data, sizeof(post_data));
+    //printf("RECV %d\n", post_data_len);
+    if (post_data_len)
     {
       pthread_mutex_lock(&_self->cs_mutex);
-           _self->send_image(conn);
-           //Signal ready if viewer not visible (no timer active)
-           pthread_cond_signal(&p_condition_var);
-           pthread_mutex_unlock(&_self->cs_mutex);
-      }
-        else
-      {
-          printf("NO IMAGE BUFFERED!\n");
-      }
-    }
-    else if (strstr(request_info->uri, "/command=") != NULL)
-    {
-      mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
-      std::string data = request_info->uri+1;
-         //Replace commas? Allows multiple comma separated commands? TODO: check where used, switch with semicolon
-         //std::replace(data.begin(), data.end(), ',', '\n');
-      const size_t equals = data.find('=');
-           pthread_mutex_lock(&_self->cs_mutex);
-         //const size_t amp = data.find('&');
-         if (std::string::npos != equals)// && std::string::npos != amp)
-         {
-        OpenGLViewer::commands.push_back(data.substr(equals+1));
+      //Push command onto queue to be processed in the viewer thread
+      post_data[post_data_len-1] = '\0';
+      FractalServer::data.push_back(post_data);
       _self->viewer->postdisplay = true;
-         }
-           pthread_mutex_unlock(&_self->cs_mutex);
+      pthread_mutex_unlock(&_self->cs_mutex);
     }
-    else if (strstr(request_info->uri, "/post") != NULL)
+  }
+  else if (strstr(request_info->uri, "/image") != NULL)
+  {
+    FractalServer::images = true; //Flag image requested
+    //TEST - gets currently cached image only
+    if (_self->image)
     {
-         FractalServer::images = true; //Flag image requested
-      //mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
-         //mg_printf(conn, "HTTP/1.1 200 OK\r\n");
-      char post_data[32000];
-      int post_data_len = mg_read(conn, post_data, sizeof(post_data));
-      //printf("%d\n%s\n", post_data_len, post_data);
-         printf("RECV %d\n", post_data_len);
-      if (post_data_len)
-      {
-        pthread_mutex_lock(&_self->cs_mutex);
-        debug_print("%u Mutex locked\n", pthread_self());
-        //Push command onto queue to be processed in the viewer thread
-        //OpenGLViewer::commands.push_back(base64_decode(post_data));
-        post_data[post_data_len-1] = '\0';
-        OpenGLViewer::commands.push_back(post_data);
-        //OpenGLViewer::commands.push_back(base64_decode(post_data));
-        _self->viewer->postdisplay = true;
-        pthread_t tid;
-        tid = pthread_self();
-         
-        //Signal ready if viewer not visible (no timer active)
-        pthread_cond_signal(&p_condition_var);
-       
-        debug_print("CLIENT THREAD ID %u UPDATED? %d\n", tid, _self->updated);
-        while (!_self->updated && !_self->viewer->quitProgram)
-        {
-          debug_print("CLIENT THREAD ID %u WAITING\n", tid);
-          pthread_cond_wait(&_self->condition_var, &_self->cs_mutex);
-        }
-        debug_print("CLIENT THREAD ID %u RESUMED, quit? %d\n", tid, _self->viewer->quitProgram);
-
-        if (!_self->viewer->quitProgram)
-        {
-          //mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/x-javascript\r\n\r\n");
-          _self->send_image(conn);
-        }
-        _self->updated = false;
-        pthread_mutex_unlock(&_self->cs_mutex);
-        debug_print("%u Mutex unlocked\n---------------------------\n", pthread_self());
-      }
-    }
-    else if (strstr(request_info->uri, "/key=") != NULL)
-    {
-      mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
-      std::string data = request_info->uri+1;
-      pthread_mutex_lock(&_self->viewer->cmd_mutex);
-      OpenGLViewer::commands.push_back("key " + data);
-      _self->viewer->postdisplay = true;
-      pthread_mutex_unlock(&_self->viewer->cmd_mutex);
-    }
-    else if (strstr(request_info->uri, "/mouse=") != NULL)
-    {
-      mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"); //Empty response, prevent XML errors
-      std::string data = request_info->uri+1;
-      pthread_mutex_lock(&_self->viewer->cmd_mutex);
-      OpenGLViewer::commands.push_back("mouse " + data);
-      _self->viewer->postdisplay = true;
-      pthread_mutex_unlock(&_self->viewer->cmd_mutex);
+      pthread_mutex_lock(&_self->cs_mutex);
+      _self->send_image(conn);
+      //Signal ready if viewer not visible (no timer active)
+      pthread_cond_signal(&p_condition_var);
+      pthread_mutex_unlock(&_self->cs_mutex);
     }
     else
     {
-      // No suitable handler found, mark as not processed. Mongoose will
-      // try to serve the request.
-      return NULL;
+      printf("NO IMAGE BUFFERED!\n");
     }
+  }
+  else if (strstr(request_info->uri, "/command=") != NULL)
+  {
+    mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
+    std::string data = request_info->uri+1;
+    //Replace commas? Allows multiple comma separated commands? TODO: check where used, switch with semicolon
+    //std::replace(data.begin(), data.end(), ',', '\n');
+    const size_t equals = data.find('=');
+    pthread_mutex_lock(&_self->cs_mutex);
+    //const size_t amp = data.find('&');
+    if (std::string::npos != equals)// && std::string::npos != amp)
+    {
+      OpenGLViewer::commands.push_back(data.substr(equals+1));
+      _self->viewer->postdisplay = true;
+    }
+    pthread_mutex_unlock(&_self->cs_mutex);
+  }
+  else if (strstr(request_info->uri, "/post") != NULL)
+  {
+    FractalServer::images = true; //Flag image requested
+    //mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
+    //mg_printf(conn, "HTTP/1.1 200 OK\r\n");
+    char post_data[32000];
+    int post_data_len = mg_read(conn, post_data, sizeof(post_data));
+    //printf("%d\n%s\n", post_data_len, post_data);
+    printf("RECV %d\n", post_data_len);
+    if (post_data_len)
+    {
+      pthread_mutex_lock(&_self->cs_mutex);
+      debug_print("%u Mutex locked\n", pthread_self());
+      //Push command onto queue to be processed in the viewer thread
+      //OpenGLViewer::commands.push_back(base64_decode(post_data));
+      post_data[post_data_len-1] = '\0';
+      OpenGLViewer::commands.push_back(post_data);
+      //OpenGLViewer::commands.push_back(base64_decode(post_data));
+      _self->viewer->postdisplay = true;
+      pthread_t tid;
+      tid = pthread_self();
+       
+      //Signal ready if viewer not visible (no timer active)
+      pthread_cond_signal(&p_condition_var);
+     
+      debug_print("CLIENT THREAD ID %u UPDATED? %d\n", tid, _self->updated);
+      while (!_self->updated && !_self->viewer->quitProgram)
+      {
+        debug_print("CLIENT THREAD ID %u WAITING\n", tid);
+        pthread_cond_wait(&_self->condition_var, &_self->cs_mutex);
+      }
+      debug_print("CLIENT THREAD ID %u RESUMED, quit? %d\n", tid, _self->viewer->quitProgram);
 
-    return (void*)request_info;  // Mark as processed
+      if (!_self->viewer->quitProgram)
+      {
+        //mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/x-javascript\r\n\r\n");
+        _self->send_image(conn);
+      }
+      _self->updated = false;
+      pthread_mutex_unlock(&_self->cs_mutex);
+      debug_print("%u Mutex unlocked\n---------------------------\n", pthread_self());
+    }
+  }
+  else if (strstr(request_info->uri, "/key=") != NULL)
+  {
+    mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
+    std::string data = request_info->uri+1;
+    pthread_mutex_lock(&_self->viewer->cmd_mutex);
+    OpenGLViewer::commands.push_back("key " + data);
+    _self->viewer->postdisplay = true;
+    pthread_mutex_unlock(&_self->viewer->cmd_mutex);
+  }
+  else if (strstr(request_info->uri, "/mouse=") != NULL)
+  {
+    mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"); //Empty response, prevent XML errors
+    std::string data = request_info->uri+1;
+    pthread_mutex_lock(&_self->viewer->cmd_mutex);
+    OpenGLViewer::commands.push_back("mouse " + data);
+    _self->viewer->postdisplay = true;
+    pthread_mutex_unlock(&_self->viewer->cmd_mutex);
   }
   else
   {
-    return NULL;
+    // No suitable handler found, mark as not processed. Mongoose will
+    // try to serve the request.
+    return 0;
   }
+
+  // Returning non-zero tells mongoose that our function has replied to
+  // the client, and mongoose should not send client any more data.
+  return 1;
 }
 
 #endif  //DISABLE_SERVER
