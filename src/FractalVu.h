@@ -53,7 +53,7 @@ public:
   virtual void display();
   virtual void close();
 
-  void write_tiled(const char* ext, bool alpha, int count=0);
+  void write_tiled(bool alpha, int count=0);
 
   // Virtual functions for interactivity
   virtual bool mouseMove(int x, int y);
