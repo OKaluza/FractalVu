@@ -96,9 +96,6 @@ json::Array jsonFromFloatArray(float* in, int count)
 //Viewer class implementation...
 FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int width, int height) : LavaVu(args, viewer, width, height)
 {
-  bool output = false, verbose = false;
-  bool writeimage = false,  writemovie = false;
-  int alpha = 0, subsample = 0;
   FilePath* fractalfile = NULL;
   encoder = NULL;
 
@@ -154,14 +151,19 @@ FractalVu::~FractalVu()
 
 std::string FractalVu::run(bool persist)
 {
-  server = FractalServer::Instance(NULL, "", 0);
+  //Get the default server instance
+  server = FractalServer::Instance();
+  
+  //Serve images as remote renderer only
+  server->imageserver = !writemovie && !viewer->visible;
 
   //Start event loop
   viewer->open(viewer->width, viewer->height);
-  if (viewer->visible)
-    viewer->execute();
-  else
+
+  if (server->imageserver)
   {
+    //Non-interactive mode for rendering images as server
+    //No local user input processing
     while (!viewer->quitProgram)
     {
       //Wait until woken by server
@@ -184,6 +186,9 @@ std::string FractalVu::run(bool persist)
       viewer->display();
     }
   }
+  else
+    //Use standard event processing loop
+    viewer->execute();
   return "";
 }
 
@@ -505,6 +510,15 @@ void FractalVu::display(void)
     //bitrate settings?
     encoder->frame();
   }
+  else if (writemovie)
+  {
+    std::string name = properties["name"].ToString("");
+    if (name.length() > 0)
+    {
+      //Start video output 
+      encodeVideo(name + ".mp4", writemovie);
+    }
+  }
 #endif
 }
 
@@ -521,7 +535,7 @@ void FractalVu::drawScene()
   int iterations = properties["iterations"].ToInt(100);
   bool julia = properties["julia"].ToBool(false);
   Colour background = Colour_FromJson(properties, "background", 0, 0, 0, 255);
-  int antialias = properties["antialias"].ToInt(2);
+  int antialias = properties["antialias"].ToInt(1);
 
   //Save origin/zoom (modified by tiling calcs)
   float origin0[2] = {origin[0], origin[1]};
@@ -685,8 +699,9 @@ void FractalVu::convert(float coord[2], float x, float y)
   coord[1] += re*Sin + im*Cos;
 }
 
-void FractalVu::write_tiled(const char* ext, bool alpha, int count)
+void FractalVu::write_tiled(bool alpha, int count)
 {
+#ifdef HAVE_LIBPNG
   std::string fn = (files.size() > 0 ? files[0].base : "default");
   float zoom = properties["zoom"].ToFloat(0.5);
   //Tiled image
@@ -696,37 +711,8 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
 
   //Write tiled data to single image file
   char path[256];
-  sprintf(path, "%s%s-tiled-%d.%s", viewer->output_path.c_str(), fn.c_str(), count, ext);
+  sprintf(path, "%s%s-tiled-%d.png", viewer->output_path.c_str(), fn.c_str(), count);
   std::ofstream file(path, std::ios::binary);
-
-  //Format specific headers
-  bool png = false;
-  if (strcmp(ext, "data") == 0)
-  {
-    char rawpath[256];
-    sprintf(rawpath, "%s%s-tiled.raw", viewer->output_path.c_str(), fn.c_str());
-    std::ofstream rawfile(rawpath);
-    rawfile << "IMAGINE_RAW_FILE" << std::endl;
-    rawfile << "WIDTH " << width << std::endl;
-    rawfile << "HEIGHT " << height << std::endl;
-    rawfile << "NUM_LAYERS 3" << std::endl;
-    rawfile << "PIXEL_FILES " << path << std::endl;
-    rawfile << "FORMAT BIP" << std::endl;
-    //rawfile << "DATATYPE U8" << std::endl;
-    //rawfile << "BYTE_ORDER LSB" << std::endl;
-    //rawfile << "DATA_OFFSET 0" << std::endl;
-    rawfile << "END_RAW_FILE" << std::endl;
-    rawfile.close();
-  }
-  else if (strcmp(ext, "ppm") == 0)
-  {
-    //Ascii Header
-    file << "P6" << std::endl;
-    file << width << " " << height << std::endl;
-    file << "255" << std::endl;
-  }
-  else if (strcmp(ext, "png") == 0)
-    png = true;
 
   //Set final image dims
   dims[0] = width;
@@ -739,22 +725,15 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
   //PNG export requires all data at once
   int tscanline = pixel * width;
   GLubyte *image, *ptr;
-  if (png)
-  {
-    image = new GLubyte[width * height * pixel];
-    ptr = image + tscanline * height;  //Flip, start at bottom
-  }
-  else
-  {
-    ptr = image = new GLubyte[width * viewer->height * pixel];
-  }
+  image = new GLubyte[width * height * pixel];
+  ptr = image + tscanline * height;  //Flip, start at bottom for png
 
   GLubyte *tile = new GLubyte[viewer->width * viewer->height * pixel];
 
   //Render & write tiles
   for (int row=0; row < tiles[1]; row++)
   {
-    if (png) ptr -= tscanline * viewer->height;
+    ptr -= tscanline * viewer->height;
     for (int col=0; col < tiles[0]; col++)
     {
       tile[0] = col;
@@ -768,37 +747,19 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
       //Copy scanlines into total image
       int scanline = pixel * viewer->width;
       GLubyte* dst = ptr + scanline * col + viewer->height * tscanline;
-      if (png)
-      {
-        //Flipped for png output
-        GLubyte* src = tile + viewer->height * scanline;
-        for (int y=0; y<viewer->height; y++)
-        {
-          dst -= tscanline;
-          src -= scanline;
-          memcpy(dst, src, scanline);
-        }
-      }
-      else
-      {
-        GLubyte* src = tile;
-        for (int y=0; y<viewer->height; y++)
-        {
-          dst -= tscanline;
-          memcpy(dst, src, scanline);
-          src += scanline;
-        }
-      }
 
+      //Flipped for png output
+      GLubyte* src = tile + viewer->height * scanline;
+      for (int y=0; y<viewer->height; y++)
+      {
+        dst -= tscanline;
+        src -= scanline;
+        memcpy(dst, src, scanline);
+      }
     }
-    //Write row unless PNG
-    if (!png) file.write((const char*)image, width * viewer->height * pixel);
   }
 
-#ifdef HAVE_LIBPNG
-  if (strcmp(ext, "png") == 0)
-    write_png(file, alpha, dims[0], dims[1], image);
-#endif
+  write_png(file, alpha, dims[0], dims[1], image);
   file.close();
 
   //Restore image dims
@@ -809,6 +770,7 @@ void FractalVu::write_tiled(const char* ext, bool alpha, int count)
   printf("Width: %d Height: %d\n", width, height);
   delete[] image;
   delete[] tile;
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -838,30 +800,10 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
   case KEY_END:
     break;
   case 'm':
-#ifdef HAVE_LIBAVCODEC
-    if (!encoder)
-    {
-      int fps = 30;
-      std::string fn = properties["name"].ToString("fractal") + ".mp4";
-      encoder = new VideoEncoder(fn.c_str(), viewer->width, viewer->height, fps);
-    }
-    else
-    {
-      delete encoder;
-      encoder = NULL;
-    }
-#endif
+    encodeVideo(properties["name"].ToString("fractal") + ".mp4");
     break;
-  case 'r':
-    write_tiled("data", false);
-    break;
-  case 'p':
-#ifdef HAVE_LIBPNG
-    write_tiled("png", false);
-#endif
-    break;
-  case 'x':
-    write_tiled("ppm", false);
+  case 't':
+    write_tiled(false);
     break;
   case '`':
     viewer->fullScreen();
@@ -1013,9 +955,7 @@ void FractalVu::zoomSteps(bool images, int steps)
     if (images)
       viewer->snapshot("fractal", viewer->alphapng);
 
-#ifdef HAVE_LIBPNG
-    write_tiled("png", false, i);
-#endif
+    write_tiled(false, i);
 
     properties["zoom"] = properties["zoom"].ToFloat(0.5) * 1.003;
     //if (i%10 == 0) iterations+= 7;
@@ -1030,20 +970,14 @@ bool FractalVu::parseCommands(std::string data)
   jsonToFloatArray(properties["selected"], selected);
   //json::Array selected = properties["selected"].ToArray();
 
-  int len = data.length();
-  if (len == 2)
-  {
-    viewer->quitProgram = true;
-    printf("QUIT\n");
-    return false;
-  }
-
+  //Data contains a fractal definition? Load it
   if (data.substr(0, 9) == "[fractal]")
   {
     update(data);
     return true;
   }
 
+  //Otherwise parse as commands
   if (data == "redisplay")
   {
     if (viewer->visible)
@@ -1107,8 +1041,9 @@ bool FractalVu::parseCommands(std::string data)
       json::Value jval;
       if (found == std::string::npos)
       {
-        std::cerr << "# Unrecognised command: \"" << data << "\"" << std::endl;
-        return false;  //Invalid
+        //std::cerr << "# Unrecognised command: \"" << data << "\"" << std::endl;
+        //return false;  //Invalid
+        return LavaVu::parseCommands(data);
       }
       else
       {

@@ -18,7 +18,7 @@ std::string initViewer(int argc, char **argv)
 {
   OpenGLViewer* viewer = NULL;
   FractalVu* app;
-  int port = 8080, quality = 90, threads = 4;
+  int port = 8080, quality = 90, threads = 1;
   bool stereo = false;
   bool fullscreen = false;
   int downsample = 0;

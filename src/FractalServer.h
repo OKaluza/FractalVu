@@ -38,6 +38,7 @@ protected:
   GLubyte *imageCache;
 
 public:
+  bool imageserver;
   unsigned char* jpeg;
   int jpeg_bytes;
 
@@ -55,7 +56,9 @@ public:
    void render();
 
   //Public instance constructor/getter
-  static FractalServer* Instance(OpenGLViewer* viewer, std::string htmlpath, int port, int quality=90, int threads=4);
+  static FractalServer* Instance(OpenGLViewer* viewer, std::string htmlpath, int port, int quality=90, int threads=1);
+  static FractalServer* Instance() {return _self;}
+
   static void Delete()
   {
     if (_self) delete _self;

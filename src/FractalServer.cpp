@@ -29,6 +29,7 @@ FractalServer* FractalServer::Instance(OpenGLViewer* viewer, std::string htmlpat
 FractalServer::FractalServer(OpenGLViewer* viewer, std::string htmlpath, int port, int quality, int threads)
   : viewer(viewer), port(port), threads(threads), path(htmlpath), quality(quality)
 {
+  imageserver = false;
   imageCache = NULL;
   image = NULL;
   jpeg = NULL;
@@ -245,7 +246,7 @@ int FractalServer::request(struct mg_connection *conn)
     mg_printf(conn, "HTTP/1.1 302 Found\r\n"
               "Set-Cookie: original_url=%s\r\n"
           "Location: %s%s\r\n\r\n",
-          request_info->uri, "/index.html", (_self->viewer->visible ? "?server=control" : "?server=render"));
+          request_info->uri, "/index.html", (_self->imageserver ? "?server=render" : "?server=control"));
   }
   else if (strstr(request_info->uri, "/clear") != NULL)
   {
@@ -269,8 +270,11 @@ int FractalServer::request(struct mg_connection *conn)
       post_data[post_data_len-1] = '\0';
       FractalServer::data.push_back(post_data);
       _self->viewer->postdisplay = true;
+      //if (_self->imageserver) pthread_cond_signal(&p_condition_var); //Required if window hidden (no timer)
+         pthread_cond_signal(&p_condition_var); //Required if window hidden (no timer)
       pthread_mutex_unlock(&_self->cs_mutex);
     }
+
   }
   else if (strstr(request_info->uri, "/image") != NULL)
   {

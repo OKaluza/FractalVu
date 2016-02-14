@@ -5,8 +5,9 @@ OPATH = tmp
 CPP=g++
 
 #Location of LavaVu build/source
-LVINC=../../LavaVu/src
-LVLIB=.
+LVINC?=../../LavaVu/src
+LVLIB?=.
+LV_LIB=$(realpath $(LVLIB))
 SRCDIR=src
 
 #Default flags
@@ -49,13 +50,9 @@ endif
 #Other optional components
 ifeq ($(VIDEO), 1)
   CFLAGS += -DHAVE_LIBAVCODEC
-  LIBS += -lavcodec -lavutil -lavformat
 endif
 ifeq ($(PNG), 1)
   CFLAGS += -DHAVE_LIBPNG
-  LIBS += -lpng
-else
-  CFLAGS += -DUSE_ZLIB
 endif
 
 #Source search paths
@@ -84,7 +81,7 @@ $(OBJS): $(OPATH)/%.o : %.cpp $(INC)
 	$(CPP) $(CFLAGS) $(DEFINES) -c $< -o $@
 
 $(PROGRAM): paths $(OBJS)
-	$(CPP) -o $(PROGRAM) $(OBJS) $(LIBS) ${LVLIB}/libLavaVu.so
+	$(CPP) -o $(PROGRAM) $(OBJS) $(LIBS) -L${LV_LIB} -Wl,-rpath=${LV_LIB} -lLavaVu
 
 clean:
 	/bin/rm -f *~ $(OPATH)/*.o $(PROGRAM)
