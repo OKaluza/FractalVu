@@ -15,6 +15,7 @@ class FractalVu : public LavaVu
   FractalShader* prog;
   GLuint vertexPositionBuffer;
   GLuint gradientTexture;
+  std::string binpath;
 protected:
   //uniforms
   float pixelsize;
@@ -33,10 +34,10 @@ public:
 
   json::Object properties;
 
-  FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int width=0, int height=0);
+  FractalVu(std::string path);
   ~FractalVu();
 
-  std::string run(bool persist);
+  std::string run(int width=0, int height=0, bool persist=false);
 
   void parseProperties(std::string& properties);
   void parseProperty(std::string& data);

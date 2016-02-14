@@ -25,21 +25,10 @@ OS := $(shell uname)
 
 ifeq ($(OS), Darwin)
   #Mac OS X interactive with GLUT
-  CFLAGS += -FGLUT -FOpenGL -I/usr/include/malloc
-  LIBS=-ldl -lpthread -framework GLUT -framework OpenGL -lobjc -lm -lz
-  DEFINES += -DHAVE_GLUT
+  CFLAGS += -FOpenGL -I/usr/include/malloc
+  LIBS=-ldl -lpthread -framework OpenGL -lobjc -lm -lz
 else
-  #Linux interactive with X11 (and optional GLUT, SDL)
-  LIBS=-ldl -lpthread -lm -lGL -lz -lX11
-  DEFINES += -DHAVE_X11
-ifeq ($(GLUT), 1)
-  LIBS+= -lglut
-  DEFINES += -DHAVE_GLUT
-endif
-ifeq ($(SDL), 1)
-  LIBS+= -lSDL
-  DEFINES += -DHAVE_SDL
-endif
+  LIBS=-ldl -lpthread -lm -lGL -lz
 endif
 
 #Add a libpath (useful for linking specific libGL)

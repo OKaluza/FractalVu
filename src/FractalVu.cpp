@@ -92,15 +92,12 @@ json::Array jsonFromFloatArray(float* in, int count)
   return array;
 }
 
-
 //Viewer class implementation...
-FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int width, int height) : LavaVu(args, viewer, width, height)
+FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
 {
   FilePath* fractalfile = NULL;
   encoder = NULL;
 
-  fixedwidth = width;
-  fixedheight = height;
   tiles[0] = tiles[1] = 4;
   newframe = true;
 
@@ -116,11 +113,6 @@ FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int wi
                       "antialias=2\n";
   parseProperties(props);
 
-  if (properties.HasKey("width"))
-    width = properties["width"];
-  if (properties.HasKey("height"))
-    height = properties["height"];
-
   //Clear shader path
   Shader::path = NULL;
   vertexPositionBuffer = 0;
@@ -133,13 +125,6 @@ FractalVu::FractalVu(std::vector<std::string> args, OpenGLViewer* viewer, int wi
   if (verbose && !output)
     infostream = stderr;
 
-  viewer->width = 0;
-  viewer->height = 0;
-  if (width) viewer->width = width;
-  if (height) viewer->height = height;
-  dims[0] = viewer->width;
-  dims[1] = viewer->height;
-
   //Tiled render disabled by default
   tile[0] = tile[1] = -1;
 }
@@ -149,11 +134,38 @@ FractalVu::~FractalVu()
   if (colourMap) delete colourMap;
 }
 
-std::string FractalVu::run(bool persist)
+std::string FractalVu::run(int width, int height, bool persist)
 {
-  //Get the default server instance
-  server = FractalServer::Instance();
-  
+////////////////////////////////////////////////////////////
+
+  fixedwidth = width;
+  fixedheight = height;
+
+  if (properties.HasKey("width"))
+    width = properties["width"];
+  if (properties.HasKey("height"))
+    height = properties["height"];
+
+  viewer->width = 0;
+  viewer->height = 0;
+
+  if (width) viewer->width = width;
+  if (height) viewer->height = height;
+  dims[0] = viewer->width;
+  dims[1] = viewer->height;
+
+  //Add input/output attachments to the viewer
+  int port = 8080, quality = 0, threads = 1;
+  std::string htmlpath = GetBinaryPath(binpath.c_str(), "FractalVu") + "html";
+  server = FractalServer::Instance(viewer, htmlpath, port, quality, threads);
+  viewer->addOutput(server);
+#ifdef USE_MIDI
+  MidiInput stdi;
+  viewer->addInput(&stdi);
+#endif
+
+////////////////////////////////////////////////////////////
+
   //Serve images as remote renderer only
   server->imageserver = !writemovie && !viewer->visible;
 
@@ -189,6 +201,8 @@ std::string FractalVu::run(bool persist)
   else
     //Use standard event processing loop
     viewer->execute();
+ 
+  FractalServer::Delete();
   return "";
 }
 
