@@ -246,7 +246,7 @@ int FractalServer::request(struct mg_connection *conn)
     mg_printf(conn, "HTTP/1.1 302 Found\r\n"
               "Set-Cookie: original_url=%s\r\n"
           "Location: %s%s\r\n\r\n",
-          request_info->uri, "/index.html", (_self->imageserver ? "?server=render" : "?server=control"));
+          request_info->uri, "/index.html", (_self->imageserver ? "?server=1" : "?server=localhost"));
   }
   else if (strstr(request_info->uri, "/clear") != NULL)
   {

@@ -397,11 +397,7 @@ void FractalVu::loadPalette()
       //Background
       std::size_t pos = line.find("=") + 1;
       Colour c = parseRGBA(line.substr(pos));
-      //ToDo: JSON!
-      //background[0] = c.rgba[0] / 255.0;
-      //background[1] = c.rgba[1] / 255.0;
-      //background[2] = c.rgba[2] / 255.0;
-      //background[3] = c.rgba[3];
+      properties["background"] = Colour_ToJson(c);
       bg = false;
       continue;
     }
