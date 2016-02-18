@@ -259,7 +259,10 @@ int FractalServer::request(struct mg_connection *conn)
   else if (strstr(request_info->uri, "/update") != NULL)
   {
     //Update shader/params only, no image returned
-    mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
+    //mg_printf(conn, "HTTP/1.1 200 OK\r\n\r\n");
+         mg_printf(conn, "HTTP/1.1 200 OK\r\n");
+         //Allow cross-origin requests
+         mg_printf(conn, "Access-Control-Allow-Origin: *\r\n\r\n");
     char post_data[32000];
     int post_data_len = mg_read(conn, post_data, sizeof(post_data));
     //printf("RECV %d\n", post_data_len);
