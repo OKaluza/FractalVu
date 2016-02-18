@@ -1,0 +1,117 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<title>Fractured | viewer</title>
+<meta name="viewport" content="width=device-width, height=device-height, minimum-scale=1, maximum-scale=1" />
+
+<style type="text/css">
+html, body { padding: 0; margin: 0; }
+</style>
+
+<script type="text/javascript">
+var server;
+function load() {
+  server = "http://" + window.location.hostname + ":8080";
+  //serverPost(server + "/update", src);
+  document.addEventListener("mousemove", mouseMove);
+  document.addEventListener("mousedown", mouseDown);
+  document.addEventListener("touchstart", touchHandler, true);
+  document.addEventListener("touchmove", touchHandler, true);
+  document.addEventListener("touchend", touchHandler, true);
+}
+
+function serverPost(url, data) {
+  var http = new XMLHttpRequest();
+
+  http.onload = function()
+  { 
+    if (http.status == 200) {
+
+    } else {
+      print("Ajax Post Error: returned status code " + http.status + " " + http.statusText);
+    }
+  }
+
+  //alert(this.url + res + " : " + fractal.state.control);
+  http.open("POST", url, true); 
+  //http.open("POST", url, false); //Synchronous test
+
+  //Send the proper header information along with the request
+  //http.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+
+  http.send(data);
+}
+
+function mouseDown(e) {
+  serverPost(server + "/clear", "");
+  mouseMove(e);
+}
+
+function mouseMove(e) {
+  //console.log(e.pageX + "," + e.pageY);
+  var im = document.getElementById("imbg");
+  var x = document.getElementById("cross");
+  x.style.left = e.clientX - x.offsetWidth * 0.5;
+  x.style.top = e.clientY - x.offsetHeight * 0.5;
+
+  var zoom = 0.85;
+  var rotate = 0;
+  var origin = [-0.5, 0.0];
+  var sel = [0.0, 0.0]
+  var size = [im.offsetWidth, im.offsetHeight];
+  var pos = [e.clientX, e.clientY];
+  var coord = convert(pos, size, zoom, rotate);
+
+  sel[0] = coord[0] + origin[0];
+  sel[1] = coord[1] + origin[1];
+  
+  src = "[fractal]\njulia=true\nselected=[" + sel[0] + "," + sel[1] + "]\n";
+ // onsole.log(src);
+  serverPost(server + "/update", src);
+}
+
+function touchHandler(e) {
+  e.clientX = e.changedTouches[0].pageX;
+  e.clientY = e.changedTouches[0].pageY;
+  mouseMove(e);
+}
+
+function rotate2d(vec, angle)
+{
+  var arad = angle * Math.PI / 180.0;
+  var Cos = Math.cos(angle);
+  var Sin = Math.sin(angle);
+  return [vec[0] * Cos - vec[1] * Sin, vec[0] * Sin + vec[1] * Cos];
+}
+
+//Converts a set of pixel coords relative to element into
+// a new fractal pos based on current fractal origin, zoom & rotate...
+function convert(pos, size, zoom, rotation)
+{
+   var half_w = size[0] * 0.5;
+   var half_h = size[1] * 0.5;
+
+   //Scale based on smallest dimension and aspect ratio
+   var box = size[0] < size[1] ? size[0] : size[1];
+   var scalex = size[0] / box;
+   var scaley = size[1] / box;
+
+   var re = scalex * (pos[0] - half_w) / (half_w * zoom);
+   var im = scaley * (pos[1] - half_h) / (half_h * zoom);
+
+   //Apply rotation to selected point
+   return rotate2d([re, im], -rotation);
+}
+
+</script>
+
+
+</head>
+
+<body onload="load()">
+
+<div id="main">
+<img id="imbg" src="mandel.png" style="height: 100%">
+</div>
+<img id="cross" style="position: absolute" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAALUlEQVQYlWNgQAX/kTBW8B8ZYFMIk0ARQFaIoQCbQuopIspNRPsOrpABSzgBAFHzU61KjdKlAAAAAElFTkSuQmCC">
+
+</body></html>
