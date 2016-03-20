@@ -32,12 +32,12 @@ public:
   int tiles[2];
   float dims[2];
 
-  json::Object properties;
+  Properties properties;
 
   FractalVu(std::string path);
   ~FractalVu();
 
-  std::string run(int width=0, int height=0, bool persist=false);
+  std::string run();
 
   void parseProperties(std::string& properties);
   void parseProperty(std::string& data);

@@ -147,7 +147,7 @@ public:
   {
     std::string value = get(key);
     if (value.length() == 0) return 0;
-    Colour c = parseRGBA(value);
+    Colour c = Colour_FromString(value);
     return c.value;
   }
 };
