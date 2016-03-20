@@ -75,18 +75,18 @@ const char *fractalFragmentShader = STRINGIFY(
 }
                                     );
 
-int jsonToFloatArray(json::Value& value, float* out)
+int jsonToFloatArray(json& value, float* out)
 {
-  json::Array array = value.ToArray();
-  if (out == NULL) out = new float[array.size()];
-  for (size_t i = 0; i < array.size(); i++)
-    out[i] = array[i].ToFloat(0);
-  return array.size();
+
+  if (out == NULL) out = new float[value.size()];
+  for (size_t i = 0; i < value.size(); i++)
+    out[i] = (float)value[i];
+  return value.size();
 }
 
-json::Array jsonFromFloatArray(float* in, int count)
+json jsonFromFloatArray(float* in, int count)
 {
-  json::Array array;
+  json array;
   for (size_t i = 0; i < count; i++)
     array.push_back(in[i]);
   return array;
@@ -101,20 +101,8 @@ FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
   tiles[0] = tiles[1] = 4;
   newframe = true;
 
-  //Store on properties to allow modification
-  std::string props = "iterations=100\n"
-                      "zoom=0.5\n"
-                      "rotate=0.0\n"
-                      "julia=false\n"
-                      "origin=[0,0]\n"
-                      "selected=[0,0]\n"
-                      "shift=[0,0]\n"
-                      "background=[0,0,0,1]\n"
-                      "antialias=2\n";
-  parseProperties(props);
-
   //Clear shader path
-  Shader::path = NULL;
+  Shader::path = "";
   vertexPositionBuffer = 0;
   gradientTexture = 0;
   prog = NULL;
@@ -134,16 +122,25 @@ FractalVu::~FractalVu()
   if (colourMap) delete colourMap;
 }
 
-std::string FractalVu::run(int width, int height, bool persist)
+std::string FractalVu::run()
 {
+  Properties::defaults["iterations"]  = 100;
+  Properties::defaults["zoom"]        = 0.5;
+  Properties::defaults["rotate"]      = 0.5;
+  Properties::defaults["julia"]       = false;
+  Properties::defaults["origin"]      = {0., 0.};
+  Properties::defaults["selected"]    = {0., 0.};
+  Properties::defaults["shift"]       = {0., 0.};
+  Properties::defaults["background"]  = {0.,0.,0.,1.};
+  Properties::defaults["antialias"]   = 2;
+  std::cout << std::setw(2) << Properties::defaults << std::endl;
+
 ////////////////////////////////////////////////////////////
+  int width = 0, height = 0;
 
-  fixedwidth = width;
-  fixedheight = height;
-
-  if (properties.HasKey("width"))
+  if (properties.has("width"))
     width = properties["width"];
-  if (properties.HasKey("height"))
+  if (properties.has("height"))
     height = properties["height"];
 
   viewer->width = 0;
@@ -220,13 +217,13 @@ void FractalVu::parseProperties(std::string& properties)
 void FractalVu::parseProperty(std::string& data)
 {
   //Set properties global object
-  jsonParseProperty(data, properties);
+  properties.parse(data);
 }
 
 void FractalVu::printProperties()
 {
   //Show properties of selected object or view/globals
-  std::cerr << "DATA: " << json::Serialize(properties) << std::endl;
+  std::cerr << "DATA: " << properties.data << std::endl;
 }
 
 void FractalVu::read(FilePath& fn)
@@ -276,21 +273,21 @@ bool FractalVu::parse(std::string& params)
   if (paren != std::string::npos)
   {
     //Already JSON
-    properties = json::Deserialize(params.substr(paren));
+    properties.parse(params.substr(paren));
   }
   else
   {
     //param=value with brackets for arrays
     std::replace(params.begin(), params.end(), '(', '[');
     std::replace(params.begin(), params.end(), ')', ']');
-    jsonParseProperties(params, properties);
+    properties.parseSet(params);
   }
 
   //Resizing is allowed only when using server in remote render mode
   if (FractalServer::images)
   {
-    dims[0] = properties["width"].ToInt(viewer->width);
-    dims[1] = properties["height"].ToInt(viewer->height);
+    dims[0] = properties.getInt("width", viewer->width);
+    dims[1] = properties.getInt("height", viewer->height);
   }
 
   return palette_changed;
@@ -299,7 +296,7 @@ bool FractalVu::parse(std::string& params)
 std::string FractalVu::stringify()
 {
   std::stringstream os;
-  os << "[fractal]\n" << json::Serialize(properties);
+  os << "[fractal]\n" << properties.data;
   os << "\n[palette]\n" << palette;
   if (fragmentShader.length())
     os << "[shader]\n" << fragmentShader;
@@ -396,8 +393,8 @@ void FractalVu::loadPalette()
     {
       //Background
       std::size_t pos = line.find("=") + 1;
-      Colour c = parseRGBA(line.substr(pos));
-      properties["background"] = Colour_ToJson(c);
+      Colour c = Colour_FromString(line.substr(pos));
+      properties.data["background"] = Colour_ToJson(c);
       bg = false;
       continue;
     }
@@ -409,13 +406,11 @@ void FractalVu::loadPalette()
     {
       iss >> delim;
       iss >> value;
-      Colour colour = parseRGBA(value);
+      Colour colour = Colour_FromString(value);
       //Add to colourmap
       colourMap->add(colour.value, PALSIZE * pos);
     }
   }
-
-
 
   colourMap->calibrate(0, PALSIZE);
   unsigned char paletteData[4*PALSIZE];
@@ -522,10 +517,10 @@ void FractalVu::display(void)
   }
   else if (writemovie)
   {
-    std::string name = properties["name"].ToString("");
-    if (name.length() > 0)
+    if (properties.has("name"))
     {
       //Start video output 
+      std::string name = properties["name"];
       encodeVideo(name + ".mp4", writemovie);
     }
   }
@@ -540,12 +535,12 @@ void FractalVu::drawScene()
   jsonToFloatArray(properties["shift"], shift);
   selected[0] += shift[0];
   selected[1] += shift[1]; //Apply shift
-  float zoom = properties["zoom"].ToFloat(0.5);
-  float rotate = properties["rotate"].ToFloat(0.0);
-  int iterations = properties["iterations"].ToInt(100);
-  bool julia = properties["julia"].ToBool(false);
-  Colour background = Colour_FromJson(properties, "background", 0, 0, 0, 255);
-  int antialias = properties["antialias"].ToInt(1);
+  float zoom = properties["zoom"];
+  float rotate = properties["rotate"];
+  int iterations = properties["iterations"];
+  bool julia = properties["julia"];
+  Colour background = properties.getColour("background", 0, 0, 0, 255);
+  int antialias = properties["antialias"];
 
   //Save origin/zoom (modified by tiling calcs)
   float origin0[2] = {origin[0], origin[1]};
@@ -585,7 +580,7 @@ void FractalVu::drawScene()
   //Uniform variables
   glUniform1i(prog->uniforms["iterations"], iterations);
 //std::cout << "Iterations: " << iterations << std::endl;
-  glUniform1i(prog->uniforms["julia"], properties["julia"].ToBool(false));
+  glUniform1i(prog->uniforms["julia"], (bool)properties["julia"]);
 //std::cout << "Julia: " << julia << std::endl;
   Colour_SetUniform(prog->uniforms["background"], background);
   glUniform2fv(prog->uniforms["origin"], 1, origin);
@@ -595,7 +590,7 @@ void FractalVu::drawScene()
 //std::cout << "Dims: " << dims[0] << "," << dims[1] << std::endl;
 
   //Update pixel size in fractal coords
-  pixelsize = 2.0 / (properties["zoom"].ToFloat(0.5) * viewer->width);
+  pixelsize = 2.0 / ((float)properties["zoom"] * viewer->width);
   glUniform1f(prog->uniforms["pixelsize"], pixelsize);
   GL_Error_Check;
 
@@ -604,7 +599,7 @@ void FractalVu::drawScene()
   glUniform1i(prog->uniforms["palette"], 0);
 
   //Parameter variables (uniforms/buffer)
-  if (properties.HasKey("variables"))
+  if (properties.has("variables"))
   {
     float params[64];
     int pcount = jsonToFloatArray(properties["variables"], params);
@@ -685,8 +680,8 @@ void FractalVu::drawScene()
 // a new fractal pos based on current fractal origin, zoom & rotate...
 void FractalVu::convert(float coord[2], float x, float y)
 {
-  float zoom = properties["zoom"].ToFloat(0.5);
-  float rotate = properties["rotate"].ToFloat(0.0);
+  float zoom = properties["zoom"];
+  float rotate = properties["rotate"];
 
   float half_w = viewer->width * 0.5;
   float half_h = viewer->height * 0.5;
@@ -713,7 +708,7 @@ void FractalVu::write_tiled(bool alpha, int count)
 {
 #ifdef HAVE_LIBPNG
   std::string fn = (files.size() > 0 ? files[0].base : "default");
-  float zoom = properties["zoom"].ToFloat(0.5);
+  float zoom = properties["zoom"];
   //Tiled image
   int width = viewer->width * tiles[0];
   int height = viewer->height * tiles[1];
@@ -796,10 +791,10 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
   case KEY_DOWN:
     break;
   case KEY_RIGHT:
-    properties["antialias"] = properties["antialias"].ToInt(2) + 1;
+    properties.data["antialias"] = (int)properties["antialias"] + 1;
     break;
   case KEY_LEFT:
-    properties["antialias"] = properties["antialias"].ToInt(2) - 1;
+    properties.data["antialias"] = (int)properties["antialias"] - 1;
     break;
   case KEY_PAGEUP:
     break;
@@ -810,7 +805,11 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
   case KEY_END:
     break;
   case 'm':
-    encodeVideo(properties["name"].ToString("fractal") + ".mp4");
+    //Start video output 
+    {
+      std::string name = properties["name"];
+      encodeVideo(name + ".mp4");
+    }
     break;
   case 't':
     write_tiled(false);
@@ -824,7 +823,7 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     return false;
     break;
   case 's':
-    viewer->snapshot("fractal");
+    viewer->snapshot();
     break;
   case 'z':
     //images, steps
@@ -869,7 +868,7 @@ bool FractalVu::mousePress(MouseButton btn, bool down, int x, int y)
       jsonToFloatArray(properties["origin"], origin);
       convert(origin, x, y);
       printf("%d,%d origin %f,%f \n", x, y, origin[0], origin[1]);
-      properties["origin"] = jsonFromFloatArray(origin, 2);
+      properties.data["origin"] = jsonFromFloatArray(origin, 2);
       redraw = true;
       break;
     }
@@ -933,7 +932,7 @@ bool FractalVu::mouseScroll(int scroll)
     ;
   //SHIFT
   else if (viewer->keyState.shift)
-    properties["iterations"] = properties["iterations"].ToInt(100) + scroll;
+    properties.data["iterations"] = (int)properties["iterations"] + scroll;
   //ALT
   else if (viewer->keyState.alt)
     ;
@@ -941,17 +940,17 @@ bool FractalVu::mouseScroll(int scroll)
   else if (viewer->keyState.ctrl)
   {
     if (scroll < 0)
-      properties["zoom"] = properties["zoom"].ToFloat(0.5) * (1/(-scroll * 1.01));
+      properties.data["zoom"] = (float)properties["zoom"] * (1/(-scroll * 1.01));
     else
-      properties["zoom"] = properties["zoom"].ToFloat(0.5) * (scroll * 1.01);
+      properties.data["zoom"] = (float)properties["zoom"] * (scroll * 1.01);
   }
   //Default = zoom
   else
   {
     if (scroll < 0)
-      properties["zoom"] = properties["zoom"].ToFloat(0.5) * (1/(-scroll * 1.1));
+      properties.data["zoom"] = (float)properties["zoom"] * (1/(-scroll * 1.1));
     else
-      properties["zoom"] = properties["zoom"].ToFloat(0.5) * (scroll * 1.1);
+      properties.data["zoom"] = (float)properties["zoom"] * (scroll * 1.1);
   }
   return true;
 }
@@ -960,14 +959,14 @@ void FractalVu::zoomSteps(bool images, int steps)
 {
   for (int i=0; i<=steps; i++)
   {
-    std::cout << "... Writing step: " << i << " zoom: " << properties["zoom"].ToFloat(0.5) << std::endl;
+    std::cout << "... Writing step: " << i << " zoom: " << (float)properties["zoom"] << std::endl;
     viewer->display();
     if (images)
-      viewer->snapshot("fractal", viewer->alphapng);
+      viewer->snapshot(-1, viewer->alphapng);
 
     write_tiled(false, i);
 
-    properties["zoom"] = properties["zoom"].ToFloat(0.5) * 1.003;
+    properties.data["zoom"] = (float)properties["zoom"] * 1.003;
     //if (i%10 == 0) iterations+= 7;
   }
 }
@@ -1006,25 +1005,25 @@ bool FractalVu::parseCommands(std::string data)
     if (parsed.has(fval, "scroll"))
     {
       if (fval < 0)
-        properties["zoom"] = properties["zoom"].ToFloat(0.5) * (1/(-fval * 1.01));
+        properties.data["zoom"] = (float)properties["zoom"] * (1/(-fval * 1.01));
       else
-        properties["zoom"] = properties["zoom"].ToFloat(0.5) * (fval * 1.01);
+        properties.data["zoom"] = (float)properties["zoom"] * (fval * 1.01);
     }
     else if (parsed.has(fval, "translatex"))
     {
       selected[0] += fval;
-      properties["selected"] = jsonFromFloatArray(selected, 2);
+      properties.data["selected"] = jsonFromFloatArray(selected, 2);
     }
     else if (parsed.has(fval, "translatey"))
     {
       //selected[1] = origsel[1] + fval;
       selected[1] += fval;
-      properties["selected"] = jsonFromFloatArray(selected, 2);
+      properties.data["selected"] = jsonFromFloatArray(selected, 2);
       //selected[1] += fval;
     }
     else if (parsed.has(fval, "translatez"))
     {
-      properties["zoom"] = properties["zoom"].ToFloat(0.5) + fval;
+      properties.data["zoom"] = (float)properties["zoom"] + fval;
 
       /*if (scroll < 0)
         zoom *= (1/(-scroll * 1.01));
@@ -1041,14 +1040,13 @@ bool FractalVu::parseCommands(std::string data)
     }
     else if (parsed.has(fval, "rotatez"))
     {
-      properties["rotate"] = properties["rotate"].ToFloat(0.0) + fval;
+      properties.data["rotate"] = (float)properties["rotate"] + fval;
       //std::cout << "RECEIVED VAL " << fval << std::endl;
       //std::cout << "selected " << selected[0] << "," << selected[1] << std::endl;
     }
     else
     {
       std::size_t found = data.find("=");
-      json::Value jval;
       if (found == std::string::npos)
       {
         //std::cerr << "# Unrecognised command: \"" << data << "\"" << std::endl;
