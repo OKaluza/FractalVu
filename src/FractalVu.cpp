@@ -1,5 +1,6 @@
 #include "Include.h"
 #include "FractalVu.h"
+#include "Server.h"
 #include "Shaders.h"
 #include "VideoEncoder.h"
 #include "base64.h"
@@ -97,6 +98,7 @@ FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
 {
   FilePath* fractalfile = NULL;
   encoder = NULL;
+  Server::port = 0; //Replace the default server
 
   tiles[0] = tiles[1] = 4;
   newframe = true;
