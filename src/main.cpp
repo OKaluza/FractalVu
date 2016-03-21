@@ -5,7 +5,7 @@
 int main(int argc, char *argv[])
 {
   ViewerApp* app = new FractalVu(argv[0]);
-  execViewer(argc, argv, app);
+  execute(argc, argv, app);
   delete app;
   return 0;
 }
