@@ -5,7 +5,7 @@ OPATH = tmp
 CPP=g++
 
 #Location of LavaVu build/source
-LVINC?=../../LavaVu/src
+LVINC?=${HOME}/Dropbox/LavaVu/src
 LVLIB?=.
 LV_LIB=$(realpath $(LVLIB))
 SRCDIR=src
