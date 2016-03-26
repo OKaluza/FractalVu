@@ -825,7 +825,7 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     return false;
     break;
   case 's':
-    viewer->snapshot();
+    viewer->image(viewer->title);
     break;
   case 'z':
     //images, steps
@@ -964,7 +964,7 @@ void FractalVu::zoomSteps(bool images, int steps)
     std::cout << "... Writing step: " << i << " zoom: " << (float)properties["zoom"] << std::endl;
     viewer->display();
     if (images)
-      viewer->snapshot(-1, viewer->alphapng);
+      viewer->image(viewer->title);
 
     write_tiled(false, i);
 
