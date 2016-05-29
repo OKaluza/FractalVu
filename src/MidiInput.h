@@ -25,8 +25,9 @@ class MidiInput : public InputInterface
       debug_print("Error: cannot open %s\n", MIDI_DEVICE);
   }
 
-  virtual bool read(std::string& data)
+  virtual bool get(std::string& data)
   {
+    bool parsed = false;
     if (midifp)
     {
       int seqfd = fileno(midifp);
@@ -51,27 +52,26 @@ class MidiInput : public InputInterface
               {
                 std::stringstream sscmd;
                 if (inpacket[1] == 41)
-                  sscmd << "translatex " << (inpacket[2] / 12700.0);
+                  sscmd << "translatex " << (inpacket[2] / 127000.0);
                 if (inpacket[1] == 42)
-                  sscmd << "translatex " << (-inpacket[2] / 12700.0);
+                  sscmd << "translatex " << (-inpacket[2] / 127000.0);
                 if (inpacket[1] == 43)
-                  sscmd << "translatey " << (inpacket[2] / 12700.0);
+                  sscmd << "translatey " << (inpacket[2] / 127000.0);
                 if (inpacket[1] == 44)
-                  sscmd << "translatey " << (-inpacket[2] / 12700.0);
+                  sscmd << "translatey " << (-inpacket[2] / 127000.0);
 
                 std::string cmd = sscmd.str();
                 if (cmd.size() > 0)
                 {
                   data = cmd;
                   parsed = true;
+                  std::cerr << cmd << std::endl;
                 }
-                //std::cerr << cmd << std::endl;
               }
               break;
-            default:
-              printf("received bytes: %x %x %x\n", inpacket[0], inpacket[1], inpacket[2]);
+            //default:
+            //  printf("received bytes: %x %x %x\n", inpacket[0], inpacket[1], inpacket[2]);
           }
-          //OpenGLViewer::commands.push_back(std::string(cmd));
         } //else 
         //printf("%d\n", ret);
       }

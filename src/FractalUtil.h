@@ -147,7 +147,7 @@ public:
   {
     std::string value = get(key);
     if (value.length() == 0) return 0;
-    Colour c = Colour_FromString(value);
+    Colour c(value);
     return c.value;
   }
 };
