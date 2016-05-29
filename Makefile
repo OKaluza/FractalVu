@@ -11,7 +11,7 @@ LV_LIB=$(realpath $(LVLIB))
 SRCDIR=src
 
 #Default flags
-CFLAGS = -std=c++11 -I${SRCDIR} -I${LVINC}
+CFLAGS = -std=c++11 -I${SRCDIR} -I${LVINC} -DUSE_MIDI
 
 #Separate compile options per configuration
 ifeq ($(CONFIG),debug)

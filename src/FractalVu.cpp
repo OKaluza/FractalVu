@@ -4,13 +4,7 @@
 #include "Shaders.h"
 #include "VideoEncoder.h"
 #include "base64.h"
-
-//Include the decompression routines
-#ifdef USE_ZLIB
-#include <zlib.h>
-#else
-#include "miniz/tinfl.c"
-#endif
+#include "MidiInput.h"
 
 const char *fractalVertexShader = STRINGIFY(
                                     attribute vec3 aVertexPosition;
@@ -106,7 +100,6 @@ FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
   //Clear shader path
   Shader::path = "";
   vertexPositionBuffer = 0;
-  gradientTexture = 0;
   prog = NULL;
   server = NULL;
   colourMap = NULL;
@@ -329,9 +322,6 @@ void FractalVu::open(int width, int height)
   printf("VIEWER OPENED %p %d,%d - %d,%d\n", this, width, height, viewer->width, viewer->height);
   resize(width, height);
 
-  if (!gradientTexture && width > 0)
-    glGenTextures(1, &gradientTexture);
-
   //A default setup for when no file passed
   if (fragmentShader.length() == 0)
   {
@@ -381,63 +371,11 @@ void FractalVu::loadProgram()
 
 void FractalVu::loadPalette()
 {
-  //Parse string into key/value pairs
-  std::stringstream is(palette);
-  //printf("PALETTE LOAD %p\n", this);
-#define PALSIZE 4096
   if (colourMap) delete colourMap;
   colourMap = new ColourMap();
-  std::string line;
-  bool bg = true;
-  while(std::getline(is, line))
-  {
-    if (bg)
-    {
-      //Background
-      std::size_t pos = line.find("=") + 1;
-      Colour c = Colour_FromString(line.substr(pos));
-      properties.data["background"] = Colour_ToJson(c);
-      bg = false;
-      continue;
-    }
-    std::istringstream iss(line);
-    float pos;
-    char delim;
-    std::string value;
-    if (iss >> pos && pos >= 0.0 && pos <= 1.0)
-    {
-      iss >> delim;
-      iss >> value;
-      Colour colour = Colour_FromString(value);
-      //Add to colourmap
-      colourMap->add(colour.value, PALSIZE * pos);
-    }
-  }
-
-  colourMap->calibrate(0, PALSIZE);
-  unsigned char paletteData[4*PALSIZE];
-  Colour col;
-  for (int i=0; i<PALSIZE; i++)
-  {
-    //col = colourMap->get(i);
-    col = colourMap->getfast(i);
-    //printf("RGBA %d %d %d %d\n", col.r, col.g, col.b, col.a);
-    paletteData[i*4] = col.r;
-    paletteData[i*4+1] = col.g;
-    paletteData[i*4+2] = col.b;
-    paletteData[i*4+3] = col.a;
-  }
-
-  if (gradientTexture)
-  {
-    glBindTexture(GL_TEXTURE_2D, gradientTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, PALSIZE, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, paletteData);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
+  colourMap->loadPalette(palette);
+  colourMap->loadTexture(true); //Repeat enabled
+  properties.data["background"] = colourMap->background.toJson();
 }
 
 void FractalVu::close()
@@ -584,7 +522,7 @@ void FractalVu::drawScene()
 //std::cout << "Iterations: " << iterations << std::endl;
   glUniform1i(prog->uniforms["julia"], (bool)properties["julia"]);
 //std::cout << "Julia: " << julia << std::endl;
-  Colour_SetUniform(prog->uniforms["background"], background);
+  background.setUniform(prog->uniforms["background"]);
   glUniform2fv(prog->uniforms["origin"], 1, origin);
   glUniform2fv(prog->uniforms["selected_"], 1, selected);
 //std::cout << "Selected: " << selected[0] << "," << selected[1] << std::endl;
@@ -597,7 +535,7 @@ void FractalVu::drawScene()
   GL_Error_Check;
 
   //Gradient texture
-  glBindTexture(GL_TEXTURE_2D, gradientTexture);
+  glBindTexture(GL_TEXTURE_2D, colourMap->texture->id);
   glUniform1i(prog->uniforms["palette"], 0);
 
   //Parameter variables (uniforms/buffer)
