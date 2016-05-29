@@ -8,7 +8,7 @@
 
 <link href='http://fonts.googleapis.com/css?family=Droid+Sans' rel='stylesheet' type='text/css'>
 <link href='http://fonts.googleapis.com/css?family=Droid+Sans+Mono' rel='stylesheet' type='text/css'>
-<link rel="stylesheet" type="text/css" href="codemirror_0.85.css">
+<link rel="stylesheet" type="text/css" href="codemirror_0.86.css">
 <link rel="stylesheet" type="text/css" href="styles.css">
 
 <script src="https://apis.google.com/js/client:platform.js" async defer></script>
@@ -20,18 +20,17 @@
 
 
 
-<script type="text/javascript" src="fractured_0.85.js"></script>
+<script type="text/javascript" src="fractured_0.86.js"></script>
 
 </head>
 
-<!--body onload="setTimeout(appInit,100);" id="body"-->
 <body onload="appInit();" id="body">
 
   <header id="header">
 
     <div id="title">
       <a href="#" onclick="switchGallery();return false;"><img src="media/icon.png" ><h1 id="heading">Fractured</h1></a>
-      <h3 id="version">0.85</h3>
+      <h3 id="version">0.86</h3>
     </div>
 
     <span id="hidetools" onclick="menu(); toggleParams(0);">&uarr;</span>
@@ -188,11 +187,10 @@
           <span id="steps"></span>
         </div>
 
-        <div class="card" id="new_version_0.85">
+        <div class="card" id="new_version_0.86">
           <div class="noteclose" onclick="toggleCard(this);">&times;</div>
-          <h3>Fractured 0.85 Released:</h3>
+          <h3>Fractured 0.86 Released:</h3>
           <ul>
-            <li>WebCL support for the updated Nokia Firefox plugin now fixed.</li>
             <li>History: browser back/forward buttons can be used to view fractal history.</li>
             <li>Pause/resume for scripting, general bug fixes</li>
           </ul>
@@ -227,13 +225,6 @@
           </p>
         </div>
 
-        <div class="card" id="no_webcl">
-          <div class="noteclose" onclick="toggleCard(this);">&times;</div>
-          <h3>No WebCL Support</h3>
-          <p>You don't appear to have a working WebCL implementation, such as the <a href="http://webcl.nokiaresearch.com">Nokia WebCL</a> firefox plugin or <a href="https://github.com/SRA-SiliconValley/webkit-webcl">Webkit-WebCL</a>.</p>
-          <p>The default WebGL renderer is generally faster but only if your graphics card (GPU) is up to the task. WebCL can use the CPU or GPU and where available allows double-precision support for deeper fractal zooms.</p>
-        </div>
-
         <div class="card" id="webgl_detected">
           <div class="noteclose" onclick="toggleCard(this);">&times;</div>
           <h3>WebGL</h3>
@@ -243,7 +234,7 @@
         <div class="card" id="no_webgl">
           <div class="noteclose" onclick="toggleCard(this);">&times;</div>
           <h3>No WebGL Support</h3>
-          <p>WebGL or WebCL is required to view fractals, see <a href=http://get.webgl.org/troubleshooting">http://get.webgl.org/troubleshooting</a> for help</p>
+          <p>WebGL is required to view fractals, see <a href=http://get.webgl.org/troubleshooting">http://get.webgl.org/troubleshooting</a> for help</p>
         </div>
 
         <div class="card" id="mouse_reference" style="font-size: 9pt;">
