@@ -12,22 +12,29 @@
 #include "base64.h"
 #include "jpeg/jpge.h"
 
+#define MAX_POST_LEN 32767
+
 FractalServer* FractalServer::_self = NULL; //Static
 std::deque<std::string> FractalServer::data;
 pthread_cond_t FractalServer::p_condition_var;
 bool FractalServer::images = false;
 bool FractalServer::resized = false;
 
-FractalServer* FractalServer::Instance(OpenGLViewer* viewer, std::string htmlpath, int port, int quality, int threads)
+//Defaults
+int FractalServer::port = 8080;
+int FractalServer::quality = 0;
+int FractalServer::threads = 1;
+std::string FractalServer::htmlpath = "html";
+
+FractalServer* FractalServer::Instance(OpenGLViewer* viewer)
 {
   if (!_self)   // Only allow one instance of class to be generated.
-    _self = new FractalServer(viewer, htmlpath, port, quality, threads);
+    _self = new FractalServer(viewer);
 
   return _self;
 }
 
-FractalServer::FractalServer(OpenGLViewer* viewer, std::string htmlpath, int port, int quality, int threads)
-  : viewer(viewer), port(port), threads(threads), path(htmlpath), quality(quality)
+FractalServer::FractalServer(OpenGLViewer* viewer) : viewer(viewer)
 {
   imageserver = false;
   imageCache = NULL;
@@ -38,7 +45,6 @@ FractalServer::FractalServer(OpenGLViewer* viewer, std::string htmlpath, int por
   clients = 0;
   // Initialize mutex and condition variable objects
   pthread_mutex_init(&cs_mutex, NULL);
-  pthread_mutex_init(&viewer->cmd_mutex, NULL);
   pthread_cond_init (&condition_var, NULL);
   pthread_mutex_init(&p_mutex, NULL);
   pthread_cond_init (&p_condition_var, NULL);
@@ -54,6 +60,7 @@ FractalServer::~FractalServer()
 // virtual functions for window management
 void FractalServer::open(int width, int height)
 {
+  if (!port) return;
   //Enable the animation timer
   //viewer->animate(250);   //1/4 sec timer
   struct mg_callbacks callbacks;
@@ -61,10 +68,10 @@ void FractalServer::open(int width, int height)
   char ports[16], threadstr[16];
   sprintf(ports, "%d", port);
   sprintf(threadstr, "%d", threads);
-  debug_print("html path: %s ports: %s\n", path.c_str(), ports);
+  debug_print("html path: %s ports: %s\n", htmlpath.c_str(), ports);
   const char *options[] =
   {
-    "document_root", path.c_str(),
+    "document_root", htmlpath.c_str(),
     "listening_ports", ports,
     "num_threads", threadstr,
     NULL
@@ -307,7 +314,7 @@ int FractalServer::request(struct mg_connection *conn)
     //const size_t amp = data.find('&');
     if (std::string::npos != equals)// && std::string::npos != amp)
     {
-      OpenGLViewer::commands.push_back(data.substr(equals+1));
+      _self->viewer->commands.push_back(data.substr(equals+1));
       _self->viewer->postdisplay = true;
     }
     pthread_mutex_unlock(&_self->cs_mutex);
@@ -326,10 +333,10 @@ int FractalServer::request(struct mg_connection *conn)
       pthread_mutex_lock(&_self->cs_mutex);
       debug_print("%u Mutex locked\n", pthread_self());
       //Push command onto queue to be processed in the viewer thread
-      //OpenGLViewer::commands.push_back(base64_decode(post_data));
+      //_self->viewer->commands.push_back(base64_decode(post_data));
       post_data[post_data_len-1] = '\0';
-      OpenGLViewer::commands.push_back(post_data);
-      //OpenGLViewer::commands.push_back(base64_decode(post_data));
+      _self->viewer->commands.push_back(post_data);
+      //_self->viewer->commands.push_back(base64_decode(post_data));
       _self->viewer->postdisplay = true;
       pthread_t tid;
       tid = pthread_self();
@@ -360,7 +367,7 @@ int FractalServer::request(struct mg_connection *conn)
     mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
     std::string data = request_info->uri+1;
     pthread_mutex_lock(&_self->viewer->cmd_mutex);
-    OpenGLViewer::commands.push_back("key " + data);
+    _self->viewer->commands.push_back("key " + data);
     _self->viewer->postdisplay = true;
     pthread_mutex_unlock(&_self->viewer->cmd_mutex);
   }
@@ -369,7 +376,7 @@ int FractalServer::request(struct mg_connection *conn)
     mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"); //Empty response, prevent XML errors
     std::string data = request_info->uri+1;
     pthread_mutex_lock(&_self->viewer->cmd_mutex);
-    OpenGLViewer::commands.push_back("mouse " + data);
+    _self->viewer->commands.push_back("mouse " + data);
     _self->viewer->postdisplay = true;
     pthread_mutex_unlock(&_self->viewer->cmd_mutex);
   }

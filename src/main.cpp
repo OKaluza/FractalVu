@@ -4,9 +4,9 @@
 // Main function
 int main(int argc, char *argv[])
 {
-  ViewerApp* app = new FractalVu(argv[0]);
-  execute(argc, argv, app);
-  delete app;
+  FractalVu fv(GetBinaryPath(argv[0], "FractalVu"));
+  std::vector<std::string> args(argv+1, argv+argc);
+  fv.run(args);
   return 0;
 }
 
