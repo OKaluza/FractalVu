@@ -23,13 +23,7 @@ endif
 #Linux/Mac specific libraries/flags
 OS := $(shell uname)
 
-ifeq ($(OS), Darwin)
-  #Mac OS X interactive with GLUT
-  CFLAGS += -FOpenGL -I/usr/include/malloc
-  LIBS=-ldl -lpthread -framework OpenGL -lobjc -lm -lz
-else
-  LIBS=-ldl -lpthread -lm -lGL -lz
-endif
+LIBS=-ldl -lpthread -lm -lGL -lz
 
 #Add a libpath (useful for linking specific libGL)
 ifdef LIBDIR
@@ -38,10 +32,16 @@ endif
 
 #Other optional components
 ifeq ($(VIDEO), 1)
-  CFLAGS += -DHAVE_LIBAVCODEC
+  CFLAGS += -DHAVE_LIBAVCODEC -DHAVE_SWSCALE
+  LIBS += -lavcodec -lavutil -lavformat -lswscale
 endif
-ifeq ($(PNG), 1)
+#Default libpng disabled, use built in png support
+LIBPNG ?= 0
+ifeq ($(LIBPNG), 1)
   CFLAGS += -DHAVE_LIBPNG
+  LIBS += -lpng
+else
+  CFLAGS += -DUSE_ZLIB
 endif
 
 #Source search paths
@@ -73,5 +73,5 @@ $(PROGRAM): paths $(OBJS)
 	$(CPP) -o $(PROGRAM) $(OBJS) $(LIBS) -L${LV_LIB} -Wl,-rpath=${LV_LIB} -lLavaVu
 
 clean:
-	/bin/rm -f *~ $(OPATH)/*.o $(PROGRAM)
+	-rm -f *~ $(OPATH)/*.o $(PROGRAM)
 

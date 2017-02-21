@@ -13,16 +13,13 @@ class FractalServer : public OutputInterface
   //Singleton class, construct with FractalServer::Instance()
 protected:
   //FractalServer() {}   //Protected constructors
-  FractalServer(OpenGLViewer* viewer, std::string htmlpath, int port, int quality, int threads);
+  FractalServer(OpenGLViewer* viewer);
   //FractalServer(FractalServer const&) {} // copy constructor is protected
   //FractalServer& operator=(FractalServer const&) {} // assignment operator is protected
 
   static FractalServer* _self;
 
   OpenGLViewer* viewer;
-
-  int port, threads;
-  std::string path;
 
   // Thread sync
   pthread_mutex_t cs_mutex;
@@ -32,12 +29,14 @@ protected:
   int clients;
   int wait_count;
   int client_id;
-  int quality;
   bool updated;
   std::map<int,bool> synched; //Client status
   GLubyte *imageCache;
 
 public:
+  static int port, threads, quality;
+  static std::string htmlpath;
+
   bool imageserver;
   unsigned char* jpeg;
   int jpeg_bytes;
@@ -56,7 +55,7 @@ public:
    void render();
 
   //Public instance constructor/getter
-  static FractalServer* Instance(OpenGLViewer* viewer, std::string htmlpath, int port, int quality=90, int threads=1);
+  static FractalServer* Instance(OpenGLViewer* viewer);
   static FractalServer* Instance() {return _self;}
 
   static void Delete()

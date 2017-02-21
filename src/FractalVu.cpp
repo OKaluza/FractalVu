@@ -1,5 +1,5 @@
-#include "Include.h"
 #include "FractalVu.h"
+#include "Include.h"
 #include "Server.h"
 #include "Shaders.h"
 #include "VideoEncoder.h"
@@ -88,7 +88,7 @@ json jsonFromFloatArray(float* in, int count)
 }
 
 //Viewer class implementation...
-FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
+FractalVu::FractalVu(std::string binpath, bool omegalib) : LavaVu(binpath, omegalib), properties(drawstate.globals, drawstate.defaults)
 {
   FilePath* fractalfile = NULL;
   encoder = NULL;
@@ -104,10 +104,6 @@ FractalVu::FractalVu(std::string path) : LavaVu(), binpath(path)
   server = NULL;
   colourMap = NULL;
 
-  //Set info/error stream
-  if (verbose && !output)
-    infostream = stderr;
-
   //Tiled render disabled by default
   tile[0] = tile[1] = -1;
 }
@@ -117,18 +113,36 @@ FractalVu::~FractalVu()
   if (colourMap) delete colourMap;
 }
 
-std::string FractalVu::run()
+void FractalVu::run(std::vector<std::string> args)
 {
-  Properties::defaults["iterations"]  = 100;
-  Properties::defaults["zoom"]        = 0.5;
-  Properties::defaults["rotate"]      = 0.5;
-  Properties::defaults["julia"]       = false;
-  Properties::defaults["origin"]      = {0., 0.};
-  Properties::defaults["selected"]    = {0., 0.};
-  Properties::defaults["shift"]       = {0., 0.};
-  Properties::defaults["background"]  = {0.,0.,0.,1.};
-  Properties::defaults["antialias"]   = 2;
-  std::cout << std::setw(2) << Properties::defaults << std::endl;
+  //Reset defaults
+  defaults();
+
+  //Default argument processing
+  arguments(args);
+
+  FractalServer::port = Server::port;
+  //FractalServer::quality = Server::quality;
+  //FractalServer::threads = Server::threads;
+  //FractalServer::render = false;
+
+  //Add server attachments to the viewer
+  if (FractalServer::port > 0)
+    viewer->addOutput(FractalServer::Instance(viewer));
+
+  for (auto a : args)
+    std::cout << a << std::endl;
+
+  properties.defaults["iterations"]  = 100;
+  properties.defaults["zoom"]        = 0.5;
+  properties.defaults["rotate"]      = 0.5;
+  properties.defaults["julia"]       = false;
+  properties.defaults["origin"]      = {0., 0.};
+  properties.defaults["selected"]    = {0., 0.};
+  properties.defaults["shift"]       = {0., 0.};
+  properties.defaults["background"]  = {0.,0.,0.,1.};
+  properties.defaults["antialias"]   = 2;
+  //std::cout << std::setw(2) << properties.defaults << std::endl;
 
 ////////////////////////////////////////////////////////////
   int width = 0, height = 0;
@@ -146,11 +160,11 @@ std::string FractalVu::run()
   dims[0] = viewer->width;
   dims[1] = viewer->height;
 
-  //Add input/output attachments to the viewer
+  /*/Add input/output attachments to the viewer
   int port = 8080, quality = 0, threads = 1;
-  std::string htmlpath = GetBinaryPath(binpath.c_str(), "FractalVu") + "html";
+  std::string htmlpath = Shader::path + "html";
   server = FractalServer::Instance(viewer, htmlpath, port, quality, threads);
-  viewer->addOutput(server);
+  viewer->addOutput(server);*/
 #ifdef USE_MIDI
   MidiInput stdi;
   viewer->addInput(&stdi);
@@ -159,12 +173,16 @@ std::string FractalVu::run()
 ////////////////////////////////////////////////////////////
 
   //Serve images as remote renderer only
-  server->imageserver = !writemovie && !viewer->visible;
+  if (server)
+    server->imageserver = !writemovie && !viewer->visible;
 
   //Start event loop
   viewer->open(viewer->width, viewer->height);
 
-  if (server->imageserver)
+  //If automation mode turned on, return at this point
+  if (drawstate.automate) return;
+
+  if (server && server->imageserver)
   {
     //Non-interactive mode for rendering images as server
     //No local user input processing
@@ -195,19 +213,7 @@ std::string FractalVu::run()
     viewer->execute();
  
   FractalServer::Delete();
-  return "";
 }
-
-//Property containers now using json
-//Parse lines with delimiter, ie: key=value
-void FractalVu::parseProperties(std::string& properties)
-{
-  //Process all lines
-  std::stringstream ss(properties);
-  std::string line;
-  while(std::getline(ss, line))
-    parseProperty(line);
-};
 
 void FractalVu::parseProperty(std::string& data)
 {
@@ -298,16 +304,17 @@ std::string FractalVu::stringify()
   return os.str();
 }
 
-void FractalVu::open(int width, int height)
+bool FractalVu::loadFile(const std::string& file)
 {
   //Read files
-  if (files.size() > 0 && files[0].ext != "")
+  //if (files.size() > 0 && files[0].ext != "")
+  FilePath fp(file);
   {
     //Read params
-    read(files[0]);
-    viewer->title = files[0].base;
+    read(fp);
+    viewer->title = fp.base;
     std::string shaderpath;
-    //Read shader
+    /*/Read shader
     if (files.size() > 1)
       read(files[1]);
     //Assume shader exists with same base name if none already loaded
@@ -315,9 +322,12 @@ void FractalVu::open(int width, int height)
     {
       FilePath shaderpath = FilePath(files[0].path + files[0].base + ".shader");
       read(shaderpath);
-    }
+    }*/
   }
+}
 
+void FractalVu::open(int width, int height)
+{
   //Viewer window created
   printf("VIEWER OPENED %p %d,%d - %d,%d\n", this, width, height, viewer->width, viewer->height);
   resize(width, height);
@@ -372,7 +382,7 @@ void FractalVu::loadProgram()
 void FractalVu::loadPalette()
 {
   if (colourMap) delete colourMap;
-  colourMap = new ColourMap();
+  colourMap = new ColourMap(drawstate);
   colourMap->loadPalette(palette);
   colourMap->loadTexture(true); //Repeat enabled
   properties.data["background"] = colourMap->background.toJson();
@@ -390,12 +400,11 @@ void FractalVu::resize(int new_width, int new_height)
 }
 
 // Render
-void FractalVu::display(void)
+void FractalVu::display(bool redraw)
 {
   if (viewer->width == 0) return;
 
   //Server update?
-  //printf("[%d tile %d] -- %d commands viewer %p app %p\n", context.tile->isInGrid, context.tile->id, FractalServer::data.size(), viewer, glapp);
   if (FractalServer::data.size() > 0)
   {
     std::string cmd = FractalServer::data.front();
@@ -410,10 +419,11 @@ void FractalVu::display(void)
   //Only update frame if changed...
   //!!!!!!!!!this kills server rendering and doesn't work with omegalib
   //if (newframe)
+  //if (prog)
   {
     prog->use(); //Activate shader
     // Clear viewport
-    glDrawBuffer(viewer->renderBuffer);
+    //glDrawBuffer(viewer->renderBuffer);
     //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     GL_Error_Check;
 
@@ -447,6 +457,20 @@ void FractalVu::display(void)
   //{
   //TODO: redraw copied framebuffer for omegalib render...
   //}
+
+  //Calculate FPS
+  {
+    auto now = std::chrono::system_clock::now();
+    std::chrono::duration<float> diff = now-frametime;
+    framecount++;
+    if (diff.count() > 1.0f)
+    {
+      fps = framecount / diff.count();
+      framecount = 0;
+      frametime = now;
+    }
+    //std::cerr << "FPS: " << fps << std::endl;
+  }
 
 #ifdef HAVE_LIBAVCODEC
   if (encoder)
@@ -647,7 +671,8 @@ void FractalVu::convert(float coord[2], float x, float y)
 void FractalVu::write_tiled(bool alpha, int count)
 {
 #ifdef HAVE_LIBPNG
-  std::string fn = (files.size() > 0 ? files[0].base : "default");
+  //std::string fn = (files.size() > 0 ? files[0].base : "default");
+  std::string fn = "default";
   float zoom = properties["zoom"];
   //Tiled image
   int width = viewer->width * tiles[0];
@@ -931,7 +956,7 @@ bool FractalVu::parseCommands(std::string data)
   {
     if (viewer->visible)
     {
-      viewer->display();
+      //viewer->display();
       //server->render();
     }
     else
@@ -1043,7 +1068,8 @@ bool FractalVu::update(std::string data)
     if (dims[0] != viewer->width || dims[1] != viewer->height)
     {
       debug_print("### Resized: %p %d,%d\n", this, dims[0], dims[1]);
-      if (viewer->fbo_enabled)
+      //if (viewer->fbo.enabled)
+      if (!viewer->visible)
       {
         viewer->setsize(dims[0], dims[1]);
         //Manually call resize as no window manager to call it

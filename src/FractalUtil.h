@@ -14,14 +14,14 @@ private:
 public:
   FractalShader(std::string& fsrc)
   {
-    init(std::string(fractalVertexShader), fsrc);
+    init(fractalVertexShader, fsrc);
     //Save vertex attribute locations
     vertexPositionAttribute = glGetAttribLocation(program, "aVertexPosition");
     glEnableVertexAttribArray(vertexPositionAttribute);
   }
   FractalShader()
   {
-    init(std::string(fractalVertexShader), std::string(fractalFragmentShader));
+    init(fractalVertexShader, fractalFragmentShader);
     //Save vertex attribute locations
     vertexPositionAttribute = glGetAttribLocation(program, "aVertexPosition");
     glEnableVertexAttribArray(vertexPositionAttribute);

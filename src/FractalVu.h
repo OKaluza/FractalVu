@@ -15,11 +15,9 @@ class FractalVu : public LavaVu
   FractalShader* prog;
   GLuint vertexPositionBuffer;
   GLuint gradientTexture;
-  std::string binpath;
 protected:
   //uniforms
   float pixelsize;
-  std::vector<FilePath> files;
   ColourMap* colourMap;
 
 public:
@@ -34,14 +32,15 @@ public:
 
   Properties properties;
 
-  FractalVu(std::string path);
+  FractalVu(std::string binpath, bool omegalib=false);
   ~FractalVu();
 
-  std::string run();
+  void run(std::vector<std::string> args);
 
-  void parseProperties(std::string& properties);
   void parseProperty(std::string& data);
   void printProperties();
+
+  bool loadFile(const std::string& file);
 
   void loadProgram();
   void loadPalette();
@@ -51,7 +50,7 @@ public:
   // Virtual functions for window management
   virtual void open(int width, int height);
   virtual void resize(int new_width, int new_height);
-  virtual void display();
+  virtual void display(bool redraw=true);
   virtual void close();
 
   void write_tiled(bool alpha, int count=0);
