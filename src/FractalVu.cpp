@@ -210,7 +210,7 @@ void FractalVu::run(std::vector<std::string> args)
   }
   else
     //Use standard event processing loop
-    viewer->execute();
+    viewer->loop();
  
   FractalServer::Delete();
 }
@@ -458,7 +458,7 @@ void FractalVu::display(bool redraw)
   //TODO: redraw copied framebuffer for omegalib render...
   //}
 
-  //Calculate FPS
+  /*/Calculate FPS
   {
     auto now = std::chrono::system_clock::now();
     std::chrono::duration<float> diff = now-frametime;
@@ -469,8 +469,8 @@ void FractalVu::display(bool redraw)
       framecount = 0;
       frametime = now;
     }
-    //std::cerr << "FPS: " << fps << std::endl;
-  }
+    std::cerr << "FPS: " << fps << std::endl;
+  }*/
 
 #ifdef HAVE_LIBAVCODEC
   if (encoder)

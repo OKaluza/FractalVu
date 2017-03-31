@@ -133,6 +133,11 @@ void FractalRenderPass::render(Renderer* client, const DrawContext& context)
         std::cout << "Master window : " << context.tile->pixelSize[0] << " x " << context.tile->pixelSize[1] << std::endl;
       }
       printf("[%d tile %d] -- viewer %p glapp %p master %p\n", context.tile->isInGrid, context.tile->id, app->glapp->viewer, app->glapp, app->isMaster);
+
+      //Set on demand rendering
+      //omega::Camera* cam = Engine::instance()->getDefaultCamera();
+      //cam->setMaxFps(0);
+      //cam->queueFrameDraw();
     }
 
     //Server update?
@@ -146,20 +151,15 @@ void FractalRenderPass::render(Renderer* client, const DrawContext& context)
       //std::cout << sharedData << std::endl;
     }
 
-    //Can't render on demand until I work out a way to 
-    //prevent the glClear calls before rendering
-    //if (FractalServer::data.size() == 0 || redisplay)
-    {
-      //client->getRenderer()->beginDraw3D(context);
-      client->getRenderer()->beginDraw2D(context);
+    //client->getRenderer()->beginDraw3D(context);
+    client->getRenderer()->beginDraw2D(context);
 
-      app->glapp->viewer->display();
-      GL_Error_Check;
+    app->glapp->viewer->display();
+    GL_Error_Check;
 
-      client->getRenderer()->endDraw();
-      GL_Error_Check;
-      app->glapp->newframe = true; //Force new frame
-    }
+    client->getRenderer()->endDraw();
+    GL_Error_Check;
+    app->glapp->newframe = true; //Force new frame
   }
 
 }
@@ -189,6 +189,8 @@ void FractalApplication::updateSharedData(SharedIStream& in)
   if (!isMaster && params.length())
   {
     FractalServer::data.push_back(params);
+    //omega::Camera* cam = Engine::instance()->getDefaultCamera();
+    //cam->queueFrameDraw();
   }
 }
 
