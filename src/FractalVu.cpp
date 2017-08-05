@@ -6,32 +6,32 @@
 #include "base64.h"
 #include "MidiInput.h"
 
-const char *fractalVertexShader = STRINGIFY(
-                                    attribute vec3 aVertexPosition;
-                                    uniform mat4 uMVMatrix;
-                                    varying vec2 coord;
-                                    void main(void)
+const char *fractalVertexShader = R"(
+attribute vec3 aVertexPosition;
+uniform mat4 uMVMatrix;
+varying vec2 coord;
+void main(void)
 {
   gl_Position = vec4(aVertexPosition, 1.0);
   //Apply translation, rotation & scaling matrix to vertices to get fractal space coords
   vec4 coords = uMVMatrix * vec4(aVertexPosition.xy, 0.0, 1.0);
   coord = coords.xy;
 }
-                                  );
+)";
 
-const char *fractalFragmentShader = STRINGIFY(
-                                      uniform vec2 offset;
-                                      uniform int iterations;
-                                      uniform bool julia;
-                                      uniform float pixelsize;
-                                      uniform vec2 dims;
-                                      uniform vec2 origin;
-                                      uniform vec2 selected_;
-                                      uniform sampler2D palette;
-                                      uniform vec4 background;
-                                      uniform float params;
-                                      varying vec2 coord;
-                                      void main()
+const char *fractalFragmentShader = R"(
+uniform vec2 offset;
+uniform int iterations;
+uniform bool julia;
+uniform float pixelsize;
+uniform vec2 dims;
+uniform vec2 origin;
+uniform vec2 selected_;
+uniform sampler2D palette;
+uniform vec4 background;
+uniform float params;
+varying vec2 coord;
+void main()
 {
   //Globals
   vec2 z;
@@ -68,7 +68,7 @@ const char *fractalFragmentShader = STRINGIFY(
   }
   gl_FragColor = colour;
 }
-                                    );
+)";
 
 int jsonToFloatArray(json& value, float* out)
 {
@@ -176,8 +176,17 @@ void FractalVu::run(std::vector<std::string> args)
   if (server)
     server->imageserver = !writemovie && !viewer->visible;
 
+  json res = drawstate.global("resolution");
+
   //Start event loop
-  viewer->open(viewer->width, viewer->height);
+  viewer->open(res[0], res[1]);
+
+  /*/Load any remaining args as parameter files
+  for (auto a : args)
+  {
+    std::cout << a << std::endl;
+    loadFile(a);
+  }*/
 
   //If automation mode turned on, return at this point
   if (drawstate.automate) return;
@@ -210,7 +219,7 @@ void FractalVu::run(std::vector<std::string> args)
   }
   else
     //Use standard event processing loop
-    viewer->loop();
+    viewer->loop(viewer->visible);
  
   FractalServer::Delete();
 }
@@ -365,8 +374,8 @@ void FractalVu::loadProgram()
     prog->build();
   }
 
-  const char* uniforms[11] = {"uMVMatrix", "palette", "offset", "iterations", "julia", "origin", "selected_", "dims", "pixelsize", "background", "params"};
-  prog->loadUniforms(uniforms, 11);
+  const char* uniforms[] = {"uMVMatrix", "palette", "offset", "iterations", "julia", "origin", "selected_", "dims", "pixelsize", "background", "params"};
+  prog->loadUniforms(uniforms, sizeof(uniforms)/sizeof(char*));
   prog->use(); //Activate shader
 
   if (!vertexPositionBuffer)
@@ -597,6 +606,7 @@ void FractalVu::drawScene()
   GL_Error_Check;
 
   glViewport(0, 0, viewer->width, viewer->height);
+  glScissor(0, 0, viewer->width, viewer->height);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   GL_Error_Check;
 
@@ -670,40 +680,30 @@ void FractalVu::convert(float coord[2], float x, float y)
 
 void FractalVu::write_tiled(bool alpha, int count)
 {
-#ifdef HAVE_LIBPNG
   //std::string fn = (files.size() > 0 ? files[0].base : "default");
   std::string fn = "default";
   float zoom = properties["zoom"];
+
+  //Enable image output mode
+  int pixel = alpha ? 4 : 3;
+  viewer->outputON(viewer->outwidth, viewer->outheight, pixel);
+
   //Tiled image
   int width = viewer->width * tiles[0];
   int height = viewer->height * tiles[1];
-  int pixel = alpha ? 4 : 3;
-
-  //Write tiled data to single image file
-  char path[256];
-  sprintf(path, "%s%s-tiled-%d.png", viewer->output_path.c_str(), fn.c_str(), count);
-  std::ofstream file(path, std::ios::binary);
 
   //Set final image dims
   dims[0] = width;
   dims[1] = height;
 
-  //Adjust output size
-  //viewer->outwidth = viewer->width;
-  //viewer->outheight = viewer->height * tiles / (float)tiles;
-
-  //PNG export requires all data at once
   int tscanline = pixel * width;
-  GLubyte *image, *ptr;
-  image = new GLubyte[width * height * pixel];
-  ptr = image + tscanline * height;  //Flip, start at bottom for png
-
-  GLubyte *tile = new GLubyte[viewer->width * viewer->height * pixel];
+  GLubyte *ptr;
+  ImageData* image = new ImageData(width, height, pixel);
+  ptr = image->pixels;
 
   //Render & write tiles
   for (int row=0; row < tiles[1]; row++)
   {
-    ptr -= tscanline * viewer->height;
     for (int col=0; col < tiles[0]; col++)
     {
       tile[0] = col;
@@ -712,25 +712,39 @@ void FractalVu::write_tiled(bool alpha, int count)
       viewer->display();
 
       // Read the pixels
-      viewer->pixels(tile, alpha);
+      ImageData* tileimage = viewer->pixels(NULL, pixel, true);
+      
+      assert(tileimage->width == viewer->width);
+      assert(tileimage->height == viewer->height);
 
       //Copy scanlines into total image
-      int scanline = pixel * viewer->width;
-      GLubyte* dst = ptr + scanline * col + viewer->height * tscanline;
+      int scanline = pixel * tileimage->width;
+      GLubyte* dst = ptr + scanline * col;
 
-      //Flipped for png output
-      GLubyte* src = tile + viewer->height * scanline;
+      GLubyte* src = tileimage->pixels;
       for (int y=0; y<viewer->height; y++)
       {
-        dst -= tscanline;
-        src -= scanline;
         memcpy(dst, src, scanline);
+        dst += tscanline;
+        src += scanline;
       }
+      delete tileimage;
     }
+    ptr += tscanline * viewer->height;
   }
 
-  write_png(file, alpha, dims[0], dims[1], image);
-  file.close();
+  //Write tiled data to single image file
+  char path[256];
+  if (alpha)
+    sprintf(path, "%s%s-tiled-%d.png", viewer->output_path.c_str(), fn.c_str(), count);
+  else
+    sprintf(path, "%s%s-tiled-%d.jpg", viewer->output_path.c_str(), fn.c_str(), count);
+
+  image->flip(); //Flip first
+  image->write(path);
+
+  //Restore display mode
+  viewer->outputOFF();
 
   //Restore image dims
   dims[0] = viewer->width;
@@ -738,9 +752,7 @@ void FractalVu::write_tiled(bool alpha, int count)
   tile[0] = tile[1] = -1;
 
   printf("Width: %d Height: %d\n", width, height);
-  delete[] image;
-  delete[] tile;
-#endif
+  delete image;
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -756,10 +768,12 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
   case KEY_DOWN:
     break;
   case KEY_RIGHT:
-    properties.data["antialias"] = (int)properties["antialias"] + 1;
+    if ((int)properties["antialias"] < 8)
+      properties.data["antialias"] = (int)properties["antialias"] + 1;
     break;
   case KEY_LEFT:
-    properties.data["antialias"] = (int)properties["antialias"] - 1;
+    if ((int)properties["antialias"] > 1)
+      properties.data["antialias"] = (int)properties["antialias"] - 1;
     break;
   case KEY_PAGEUP:
     break;
@@ -778,6 +792,9 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     break;
   case 't':
     write_tiled(false);
+    break;
+  case 'T':
+    write_tiled(true);
     break;
   case '`':
     viewer->fullScreen();
@@ -1049,10 +1066,13 @@ bool FractalVu::update(std::string data)
   if (shaderChanged)
   {
     //Save source
-    fragmentShader = shader;
     //Reload uniforms/buffers
     //debug_print("NEW SHADER LOADING: %p %d %d,%d\n", this, viewer->isopen, viewer->width, viewer->height);
-    if (viewer->width) loadProgram();
+    if (viewer->width) 
+    {
+      fragmentShader = shader;
+      loadProgram();
+    }
     //else debug_print("SKIPPED SHADER! NO PROGRAM %p\n", this);
     //debug_print("NEW SHADER LOADED: %p %d %p\n", this, viewer->isopen, prog);
   }

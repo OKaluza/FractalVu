@@ -90,22 +90,22 @@ void FractalServer::resize(int new_width, int new_height)
          viewer->postdisplay = true;
 }
 
-bool FractalServer::compare(GLubyte* image)
+bool FractalServer::compare(ImageData* image)
 {
   bool match = false;
-  if (imageCache)
+  if (imageCache && imageCache->width == image->width && imageCache->height == image->height)
   {
     match = true;
-    size_t size = viewer->width * viewer->height * 3;
+    size_t size = image->width * image->height * 3;
     for (unsigned int i=0; i<size; i++)
     {
-      if (image[i] != imageCache[i])
+      if (image->pixels[i] != imageCache->pixels[i])
       {
         match = false;
         break;
       }
     }
-    delete[] imageCache;
+    delete imageCache;
   }
   imageCache = image;
   return match;
@@ -123,11 +123,11 @@ void FractalServer::display()
   if (pthread_mutex_trylock(&cs_mutex) == 0)
   {
     //CRITICAL SECTION
-    if (image) delete[] image;
-    size_t size = viewer->width * viewer->height * 3;
-    image = new GLubyte[size];
+    if (image) delete image;
+    //size_t size = viewer->width * viewer->height * 3;
+    //image = new GLubyte[size];
     // Read the pixels (flipped)
-    viewer->pixels(image, false, true);
+    image = viewer->pixels(NULL, 3, true);
 
       updated = true; //Set new frame rendered flag
          encoded.clear();   //Delete cached data
@@ -150,11 +150,12 @@ void FractalServer::render()
    pthread_mutex_lock(&cs_mutex);
 
    //CRITICAL SECTION
-   if (image) delete[] image;
-   size_t size = viewer->width * viewer->height * 3;
-   image = new GLubyte[size];
+   if (image) delete image;
+   //size_t size = viewer->width * viewer->height * 3;
+   //image = new GLubyte[size];
    // Read the pixels (flipped)
-   viewer->pixels(image, false, true);
+   //viewer->pixels(image, 3, true);
+   image = viewer->pixels(NULL, 3, true);
 
    updated = true; //Set new frame rendered flag
    encoded.clear();   //Delete cached data

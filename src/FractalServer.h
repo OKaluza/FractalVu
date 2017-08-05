@@ -31,7 +31,7 @@ protected:
   int client_id;
   bool updated;
   std::map<int,bool> synched; //Client status
-  GLubyte *imageCache;
+  ImageData *imageCache;
 
 public:
   static int port, threads, quality;
@@ -49,7 +49,7 @@ public:
    static bool images;
    static bool resized;
 
-   GLubyte *image;
+   ImageData *image;
    std::string encoded;
 
    void render();
@@ -77,7 +77,7 @@ public:
   virtual void close();
   virtual void idle() {}
 
-  bool compare(GLubyte* image);
+  bool compare(ImageData* image);
 };
 
 #endif //DISABLE_SERVER
