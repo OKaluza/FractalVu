@@ -121,6 +121,26 @@ void FractalVu::run(std::vector<std::string> args)
   //Default argument processing
   arguments(args);
 
+  //Read additional command line switches
+  for (unsigned int i=0; i<args.size(); i++)
+  {
+    char x;
+    std::istringstream ss(args[i]);
+    ss >> x;
+    //Switches can be before or after files but not between
+    if (x == '-' && args[i].length() > 1)
+    {
+      ss >> x;
+      //Unused switches: bklosu, BDEFHKLMOPUXYZ
+      switch (x)
+      {
+      case 'o':
+        ss >> tiles[0] >> x >> tiles[1];
+        break;
+      }
+    }
+  }
+
   FractalServer::port = Server::port;
   //FractalServer::quality = Server::quality;
   //FractalServer::threads = Server::threads;
@@ -181,13 +201,6 @@ void FractalVu::run(std::vector<std::string> args)
   //Start event loop
   viewer->open(res[0], res[1]);
 
-  /*/Load any remaining args as parameter files
-  for (auto a : args)
-  {
-    std::cout << a << std::endl;
-    loadFile(a);
-  }*/
-
   //If automation mode turned on, return at this point
   if (drawstate.automate) return;
 
@@ -234,20 +247,6 @@ void FractalVu::printProperties()
 {
   //Show properties of selected object or view/globals
   std::cerr << "DATA: " << properties.data << std::endl;
-}
-
-void FractalVu::read(FilePath& fn)
-{
-  //Parse fractal file
-  std::ifstream fs(fn.full.c_str(), std::ios::in);
-  if (fs.is_open())
-  {
-    std::stringstream buffer;
-    buffer << fs.rdbuf();
-    //std::cout << buffer.str() << std::endl;
-    update(buffer.str());
-    fs.close();
-  }
 }
 
 std::string FractalVu::stripSection(std::string name, std::string& params)
@@ -315,24 +314,22 @@ std::string FractalVu::stringify()
 
 bool FractalVu::loadFile(const std::string& file)
 {
-  //Read files
-  //if (files.size() > 0 && files[0].ext != "")
-  FilePath fp(file);
+  std::cout << "LOAD: " << file << std::endl;
+  FilePath fn(file);
+
+  //Parse fractal file
+  std::ifstream fs(fn.full.c_str(), std::ios::in);
+  if (fs.is_open())
   {
-    //Read params
-    read(fp);
-    viewer->title = fp.base;
-    std::string shaderpath;
-    /*/Read shader
-    if (files.size() > 1)
-      read(files[1]);
-    //Assume shader exists with same base name if none already loaded
-    if (fragmentShader.length() == 0)
-    {
-      FilePath shaderpath = FilePath(files[0].path + files[0].base + ".shader");
-      read(shaderpath);
-    }*/
+    std::stringstream buffer;
+    buffer << fs.rdbuf();
+    //std::cout << buffer.str() << std::endl;
+    //update(buffer.str());
+    FractalServer::data.push_back(buffer.str());
+    fs.close();
   }
+
+  viewer->title = fn.base;
 }
 
 void FractalVu::open(int width, int height)
@@ -621,8 +618,8 @@ void FractalVu::drawScene()
   //Draw and blend multiple passes for anti-aliasing
   glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA);
   float blendinc = 0;
-  float pixel_x = 2.0 / (zoom * dims[0]);
-  float pixel_y = 2.0 / (zoom * dims[1]);
+  float pixel_x = 2.0 / (zoom * viewer->width);
+  float pixel_y = 2.0 / (zoom * viewer->height);
   for (int j=0; j<antialias; j++)
   {
     for (int k=0; k<antialias; k++)
@@ -709,6 +706,7 @@ void FractalVu::write_tiled(bool alpha, int count)
       tile[0] = col;
       tile[1] = row;
 
+      std::cout << row << "," << col << std::endl;
       viewer->display();
 
       // Read the pixels
@@ -761,6 +759,7 @@ void FractalVu::write_tiled(bool alpha, int count)
 bool FractalVu::keyPress(unsigned char key, int x, int y)
 {
   //Process single char commands
+  bool redisplay = true;
   switch(key)
   {
   case KEY_UP:
@@ -811,7 +810,10 @@ bool FractalVu::keyPress(unsigned char key, int x, int y)
     //images, steps
     zoomSteps(false, 1800);
     break;
+  default:
+    redisplay = false;
   }
+  return redisplay;
 }
 
 bool FractalVu::mousePress(MouseButton btn, bool down, int x, int y)

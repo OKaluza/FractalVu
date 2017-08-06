@@ -67,7 +67,6 @@ public:
 
   bool update(std::string data);
 
-  void read(FilePath& fn);
   std::string stripSection(std::string name, std::string& params);
   bool parse(std::string& params);
   std::string stringify();
